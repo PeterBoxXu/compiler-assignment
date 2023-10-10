@@ -143,7 +143,15 @@ let sbytes_of_data : data -> sbyte list = function
 let debug_simulator = ref false
 
 (* Interpret a condition code with respect to the given flags. *)
-let interp_cnd {fo; fs; fz} : cnd -> bool = fun x -> failwith "interp_cnd unimplemented"
+let interp_cnd {fo; fs; fz} : cnd -> bool = fun x -> 
+  (* failwith "interp_cnd unimplemented" *)
+  match x with
+  | Eq -> fz
+  | Neq -> not fz 
+  | Lt -> ((fs && (not fo)) || ((not fs) && fo))
+  | Le -> ((fs && (not fo)) || ((not fs) && fo)) || fz
+  | Gt -> not (((fs && (not fo)) || ((not fs) && fo)) || fz)
+  | Ge -> not ((fs && (not fo)) || ((not fs) && fo))
 
 (* Maps an X86lite address into Some OCaml array index,
    or None if the address is not within the legal address space. *)
