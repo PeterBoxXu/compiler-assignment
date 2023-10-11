@@ -161,6 +161,59 @@ let map_addr (addr:quad) : int option =
   else
     None 
 
+(* let interp_operand (opn:operand) (m:mach) : quad =
+  match opn with
+  | Imm (Lbl l) -> failwith "interp_operand: tried to interpret a label!"
+  | Imm (Lit i) -> i
+  | Reg r -> rind r
+  | Ind1 (Lbl l) -> failwith "interp_operand: tried to interpret a label!"
+  | Ind1 (Lit i) -> i
+  | Ind2 r -> mm.regs.(rind r)
+  | Ind3 (Lbl l, reg r) -> failwith "interp_operand: tried to interpret a label!" *)
+
+let interp_unary_operand (operands : operand list, m:mach) : int = 
+  begin match operands with
+  | [Imm (Lit i)] | [Imm (Lbl l)] -> failwith "interp_unary_operand: tried to interpret an immediate value!"
+  | [Reg r] -> rind r
+  | [Ind1 (Lit i)] -> map_addr i
+  | [Ind1 (Lbl l)] -> failwith "interp_unary_operand: tried to interpret a label!"
+  | [Ind2 r] -> map_addr(m.regs.(rind r))
+  | [Ind3 (Lit i, reg r)] -> map_addr(m.regs.(rind r) + i)
+  | _ -> failwith "interp_unary_operand: tried to interpret an invalid operand!"
+  end
+
+(* let interp_binary_operand (operands : operand list) : (int64 * int) = 
+  begin match operands with
+  | [Ind1 i, Ind1 j] -> 
+  | [(Ind1 | Ind2 | Ind3) _, (Ind1 | Ind2 | Ind3) _] -> failwith "interp_binary_operand: tried to interpret an invalid operand!"
+  | [_, Imm i] -> failwith "interp_binary_operand: tried to interpret an immediate value!"
+
+  end *)
+
+let interp_binary_operand (operands : operand list, m:mach) : (int64 * int) = 
+  begin match operands with 
+  | [(Ind1 | Ind2 | Ind3) _, (Ind1 | Ind2 | Ind3) _] -> failwith "interp_binary_operand: tried to interpret an invalid operand!"
+  | [src, dst] -> 
+    let s = begin match src with 
+    | Imm (Lit i) -> i
+    | Imm (Lbl l) -> failwith "interp_binary_operand: tried to interpret a label!"
+    | Reg r -> m.regs.(rind r)
+    | Ind1 (Lit i) -> m.mem.(map_addr i)
+    | Ind1 (Lbl l) -> failwith "interp_binary_operand: tried to interpret a label!"
+    | Ind2 r -> m.mem.(map_addr(m.regs.(rind r)))
+    | Ind3 (Lit i, reg r) -> m.mem.(map_addr(m.regs.(rind r) + i))
+    | Ind3 (Lbl l, reg r) -> failwith "interp_binary_operand: tried to interpret a label!"
+    end in 
+    let d = begin match dst with
+    | Imm i -> failwith "interp_binary_operand: tried to interpret an immediate value!"
+    | Reg r -> rind r
+    | Ind1 (Lit i) -> map_addr i
+    | Ind1 (Lbl l) -> failwith "interp_binary_operand: tried to interpret a label!"
+    | Ind2 r -> map_addr(m.regs.(rind r))
+    | Ind3 (Lit i, reg r) -> map_addr(m.regs.(rind r) + i)
+    | Ind3 (Lbl l, reg r) -> failwith "interp_binary_operand: tried to interpret a label!"
+    end in (s, d)
+
 
 (* Simulates one step of the machine:
     - fetch the instruction at %rip
@@ -169,8 +222,24 @@ let map_addr (addr:quad) : int option =
     - update the registers and/or memory appropriately
     - set the condition flags
 *)
-let step (m:mach) : unit =
-failwith "step unimplemented"
+(* let step (m:mach) : unit =
+  (* failwith "step unimplemented" *)
+  let rip = m.regs.(rind Rip) in 
+  let addr = map_addr rip in
+  let byte = m.mem.(addr) in
+  match byte with 
+  | InsFrag -> failwith "step: tried to interpret a fragment!"
+  | Byte c -> failwith "step: tried to interpret a byte!"
+  | InsB0 (op, args) -> 
+    match op with 
+*)
+
+let step (m:mach) : unit = failwith "step unimplemented"
+
+
+
+
+
 
 (* Runs the machine until the rip register reaches a designated
    memory address. Returns the contents of %rax when the 
