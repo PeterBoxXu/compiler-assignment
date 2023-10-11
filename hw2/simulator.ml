@@ -208,26 +208,45 @@ let interp_unary_operand (operands : operand list) (m:mach) : int =
 let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) = 
   begin match operands with 
   (* | [(Ind1 i| Ind2 i| Ind3 (i, r)); (Ind1 j| Ind2 j| Ind3 (j, r'))] -> failwith "interp_binary_operand: tried to interpret an invalid operand!" *)
+  | [Ind1 _; Ind1 _]
+  | [Ind2 _; Ind1 _]
+  | [Ind3 (_, _); Ind1 _]
+  | [Ind1 _; Ind2 _]
+  | [Ind2 _; Ind2 _]
+  | [Ind3 (_, _); Ind2 _]
+  | [Ind1 _; Ind3 (_, _)]
+  | [Ind2 _; Ind3 (_, _)]
+  | [Ind3 (_, _); Ind3 (_, _)] -> failwith "interp_binary_operand: tried to interpret an invalid operand!"
   | [src; dst] ->
       let s = begin match src with 
       | Imm (Lit i) -> i
       | Imm (Lbl l) -> failwith "interp_binary_operand: tried to interpret a label!"
       | Reg r -> m.regs.(rind r)
-      | Ind1 (Lit i) -> (get_from_mem (map_addr i) (m.mem))
+      | Ind1 (Lit i) -> int64_of_sbytes(get_from_mem (map_addr i) (m.mem))
       | Ind1 (Lbl l) -> failwith "interp_binary_operand: tried to interpret a label!"
-      | Ind2 r -> m.mem.(map_addr(m.regs.(rind r)))
-      | Ind3 (Lit i, r) -> m.mem.(map_addr(m.regs.(rind r) + i))
+      | Ind2 r -> int64_of_sbytes(get_from_mem (map_addr(m.regs.(rind r))) (m.mem))
+      | Ind3 (Lit i, r) -> int64_of_sbytes(get_from_mem (map_addr(Int64.add m.regs.(rind r) i)) (m.mem))
       | Ind3 (Lbl l, r) -> failwith "interp_binary_operand: tried to interpret a label!"
       end in 
       let d = begin match dst with
       | Imm i -> failwith "interp_binary_operand: tried to interpret an immediate value!"
       | Reg r -> rind r
-      | Ind1 (Lit i) -> map_addr i
+      | Ind1 (Lit i) -> begin match map_addr i with
+                        | None -> raise X86lite_segfault
+                        | Some i -> i
+                        end
       | Ind1 (Lbl l) -> failwith "interp_binary_operand: tried to interpret a label!"
-      | Ind2 r -> map_addr(m.regs.(rind r))
-      | Ind3 (Lit i, r) -> map_addr(m.regs.(rind r) + i)
+      | Ind2 r -> begin match map_addr(m.regs.(rind r)) with
+                  | None -> raise X86lite_segfault
+                  | Some i -> i
+                  end
+      | Ind3 (Lit i, r) -> begin match map_addr(Int64.add m.regs.(rind r) i) with 
+                          | None -> raise X86lite_segfault
+                          | Some i -> i
+                          end
       | Ind3 (Lbl l, r) -> failwith "interp_binary_operand: tried to interpret a label!"
       end in (s, d)
+  | _ -> failwith "interp_binary_operand: tried to interpret an invalid operand!"
     end
 
 (* Simulates one step of the machine:
