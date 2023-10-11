@@ -161,6 +161,10 @@ let map_addr (addr:quad) : int option =
   else
     None 
 
+let get_from_mem (addr:int option) (mm:mem) : sbyte list = 
+  match addr with 
+  | None -> raise X86lite_segfault
+  | Some i -> mm.(i) :: mm.(i+1) :: mm.(i+2) :: mm.(i+3) :: mm.(i+4) :: mm.(i+5) :: mm.(i+6) :: mm.(i+7) :: []
 
 (* let interp_operand (opn:operand) (m:mach) : quad =
   match opn with
