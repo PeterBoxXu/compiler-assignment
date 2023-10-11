@@ -171,14 +171,14 @@ let map_addr (addr:quad) : int option =
   | Ind2 r -> mm.regs.(rind r)
   | Ind3 (Lbl l, reg r) -> failwith "interp_operand: tried to interpret a label!" *)
 
-let interp_unary_operand (operands : operand list, m:mach) : int = 
+let interp_unary_operand (operands : operand list) (m:mach) : int option = 
   begin match operands with
-  | [Imm (Lit i)] | [Imm (Lbl l)] -> failwith "interp_unary_operand: tried to interpret an immediate value!"
-  | [Reg r] -> rind r
+  | [Imm _] -> failwith "interp_unary_operand: tried to interpret an immediate value!"
+  | [Reg r] -> Some(rind r)
   | [Ind1 (Lit i)] -> map_addr i
-  | [Ind1 (Lbl l)] -> failwith "interp_unary_operand: tried to interpret a label!"
+  | [Ind1 (Lbl _)] -> failwith "interp_unary_operand: tried to interpret a label!"
   | [Ind2 r] -> map_addr(m.regs.(rind r))
-  | [Ind3 (Lit i, reg r)] -> map_addr(m.regs.(rind r) + i)
+  | [Ind3 (Lit i, r)] -> map_addr(Int64.add m.regs.(rind r)  i)
   | _ -> failwith "interp_unary_operand: tried to interpret an invalid operand!"
   end
 
@@ -190,10 +190,21 @@ let interp_unary_operand (operands : operand list, m:mach) : int =
 
   end *)
 
-let interp_binary_operand (operands : operand list, m:mach) : (int64 * int) = 
+let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) = 
   begin match operands with 
-  | [(Ind1 | Ind2 | Ind3) _, (Ind1 | Ind2 | Ind3) _] -> failwith "interp_binary_operand: tried to interpret an invalid operand!"
-  | [src, dst] -> 
+  (* | [(Ind1 i| Ind2 i| Ind3 (i, r)); (Ind1 j| Ind2 j| Ind3 (j, r'))] -> failwith "interp_binary_operand: tried to interpret an invalid operand!" *)
+  | [src; dst] ->
+    begin match [src; dst] with  
+    | [Ind1 _; Ind1 _] -> failwith ""
+    | [Ind1 _; Ind2 _] -> failwith ""
+    | [Ind1 _; Ind3 _] -> failwith ""
+    | [Ind2 i; Ind1 j] -> failwith ""
+    | [Ind2 i; Ind2 j] -> failwith ""
+    | [Ind2 i; Ind3 j] -> failwith ""
+    | [Ind3 i; Ind1 j] -> failwith ""
+    | [Ind3 i; Ind2 j] -> failwith ""
+    | [Ind3 i; Ind3 j] -> failwith ""
+    | [_; _] ->
     let s = begin match src with 
     | Imm (Lit i) -> i
     | Imm (Lbl l) -> failwith "interp_binary_operand: tried to interpret a label!"
@@ -213,6 +224,7 @@ let interp_binary_operand (operands : operand list, m:mach) : (int64 * int) =
     | Ind3 (Lit i, reg r) -> map_addr(m.regs.(rind r) + i)
     | Ind3 (Lbl l, reg r) -> failwith "interp_binary_operand: tried to interpret a label!"
     end in (s, d)
+  | _ -> failwith "invalid case of interp_binary_operand"
 
 
 (* Simulates one step of the machine:
