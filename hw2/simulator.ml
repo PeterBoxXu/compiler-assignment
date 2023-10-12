@@ -153,6 +153,9 @@ let interp_cnd {fo; fs; fz} : cnd -> bool = fun x ->
   | Gt -> not (((fs && (not fo)) || ((not fs) && fo)) || fz)
   | Ge -> not ((fs && (not fo)) || ((not fs) && fo))
 
+
+(* -------------------------------- Helper: Memory Access -------------------------------- *)
+
 (* Maps an X86lite address into Some OCaml array index,
    or None if the address is not within the legal address space. *)
 let map_addr (addr:quad) : int option =
@@ -162,11 +165,16 @@ let map_addr (addr:quad) : int option =
     None 
 
 (* Accesses X86Lite memory array using the mapped index *)
-let get_from_mem (addr:int option) (mm:mem) : sbyte list = 
+(* Used for accessing both instructions and data *)
+let get_sbyte_from_mem (addr:int option) (mm:mem) : sbyte list = 
   match addr with 
   | None -> raise X86lite_segfault
   | Some i -> mm.(i) :: mm.(i+1) :: mm.(i+2) :: mm.(i+3) :: mm.(i+4) :: mm.(i+5) :: mm.(i+6) :: mm.(i+7) :: []
 
+let get_int64_from_mem (addr:int option) (mm:mem) : int64 = 
+  int64_of_sbytes(get_sbyte_from_mem addr mm)
+
+(* Sets the value of the memory array at the mapped index *)
 let set_in_mem (addr:int option) (mm:mem) (bs:sbyte list) : unit = 
   begin match addr with 
   | None -> raise X86lite_segfault
@@ -182,6 +190,8 @@ let set_in_mem (addr:int option) (mm:mem) (bs:sbyte list) : unit =
     (* TODO: refactor to blit *)
   end
 
+
+(* -------------------------------- Helper: Sign Computation -------------------------------- *)
 let sign_bit (a: int64) : bool =
   if ((Int64.compare a 0L) < 0) then true 
   else false
@@ -190,8 +200,10 @@ let same_sign (a: int64) (b: int64) : bool =
   if (sign_bit a) = (sign_bit b) then true
   else false
 
-(* Interpret an operand with respect to the given machine state. *)
+  
+(* -------------------------------- Helper: Interpret Operands -------------------------------- *)
 
+(* Interpret an operand with respect to the given machine state. *)
 let interp_unary_operand (operands : operand list) (m:mach) : int = 
   begin match operands with
   | [Imm _] -> failwith "interp_unary_operand: tried to interpret an immediate value!"
@@ -215,7 +227,6 @@ let interp_unary_operand (operands : operand list) (m:mach) : int =
 
 let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) = 
   begin match operands with 
-  (* | [(Ind1 i| Ind2 i| Ind3 (i, r)); (Ind1 j| Ind2 j| Ind3 (j, r'))] -> failwith "interp_binary_operand: tried to interpret an invalid operand!" *)
   | [Ind1 _; Ind1 _]
   | [Ind2 _; Ind1 _]
   | [Ind3 (_, _); Ind1 _]
@@ -230,10 +241,10 @@ let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) =
       | Imm (Lit i) -> i
       | Imm (Lbl l) -> failwith "interp_binary_operand: tried to interpret a label!"
       | Reg r -> m.regs.(rind r)
-      | Ind1 (Lit i) -> int64_of_sbytes(get_from_mem (map_addr i) (m.mem))
+      | Ind1 (Lit i) -> get_int64_from_mem (map_addr i) (m.mem)
       | Ind1 (Lbl l) -> failwith "interp_binary_operand: tried to interpret a label!"
-      | Ind2 r -> int64_of_sbytes(get_from_mem (map_addr(m.regs.(rind r))) (m.mem))
-      | Ind3 (Lit i, r) -> int64_of_sbytes(get_from_mem (map_addr(Int64.add m.regs.(rind r) i)) (m.mem))
+      | Ind2 r -> get_int64_from_mem (map_addr(m.regs.(rind r))) (m.mem)
+      | Ind3 (Lit i, r) -> get_int64_from_mem (map_addr(Int64.add m.regs.(rind r) i)) (m.mem)
       | Ind3 (Lbl l, r) -> failwith "interp_binary_operand: tried to interpret a label!"
       end in 
       let d = begin match dst with
@@ -267,6 +278,11 @@ let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) =
 
 let execute (op: opcode) (args: operand list) (m:mach) : unit = 
   (* failwith "execute unimplemented" *)
+
+  (* ------------------------------------------------------------------------------------------------ *)
+  (* ----------------------------------- Arithmetic Instructions ------------------------------------ *)
+  (* ------------------------------------------------------------------------------------------------ *)
+
   begin match op with
   | Negq -> 
     let idx: int = interp_unary_operand args m in
@@ -274,7 +290,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [Reg _] -> let d1 = Int64.neg m.regs.(idx) in (m.regs.(idx) <- d1); d1
       | [Ind1 _]
       | [Ind2 _]
-      | [Ind3 _] -> let d2 = Int64.neg (int64_of_sbytes(get_from_mem (Some idx) m.mem)) in (set_in_mem (Some idx) m.mem (sbytes_of_int64 d2)); d2
+      | [Ind3 _] -> let d2 = Int64.neg (get_int64_from_mem (Some idx) m.mem) in (set_in_mem (Some idx) m.mem (sbytes_of_int64 d2)); d2
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end in
     Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0));
@@ -287,8 +303,8 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     let (s64, d64, r64) = begin match args with
       | [_; Ind1 _] 
       | [_; Ind2 _]
-      | [_; Ind3 _] -> let r1 = Int64.sub (int64_of_sbytes(get_from_mem (Some d) m.mem)) s in
-                      let temp = (int64_of_sbytes(get_from_mem (Some d) m.mem)) in
+      | [_; Ind3 _] -> let r1 = Int64.sub (get_int64_from_mem (Some d) m.mem) s in
+                      let temp = (get_int64_from_mem (Some d) m.mem) in
                       set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
                       (s, temp, r1)
       | [_; Reg _] -> let r2 = Int64.sub m.regs.(d) s in 
@@ -300,7 +316,17 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
     m.flags.fz <- ((Int64.compare r64 0L) = 0);
     m.flags.fs <- sign_bit (r64)
-  | Shlq ->
+
+  (* ------------------------------------------------------------------------------------------------ *)
+  (* ----------------------------------- Logic Instructions ----------------------------------------- *)
+  (* ------------------------------------------------------------------------------------------------ *)
+
+
+  (* ------------------------------------------------------------------------------------------------ *)
+  (* ----------------------------------- Bit-manipulation Instructions ------------------------------ *)
+  (* ------------------------------------------------------------------------------------------------ *)
+
+  (* | Shlq ->
     let (amt, d) = interp_binary_operand args m in
     let (d64, r64) =
     begin match args with
@@ -314,7 +340,12 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     | [Reg Rcx; Ind1 d] -> failwith ""
     | [Reg Rcx; Ind2 d] -> failwith ""
     | _ -> failwith ""
-    end in
+    end in *)
+
+  (* ------------------------------------------------------------------------------------------------ *)
+  (* ----------------------------------- Data-movement Instructions --------------------------------- *)
+  (* ------------------------------------------------------------------------------------------------ *)
+
   | Movq ->
     let (s, d) = interp_binary_operand args m in
     begin match args with
@@ -324,13 +355,18 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [_; Reg _] -> m.regs.(d) <- s
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end;
+
+  (* ------------------------------------------------------------------------------------------------ *)
+  (* ----------------------------------- Control-flow and condition --------------------------------- *)
+  (* ------------------------------------------------------------------------------------------------ *)
+
   | _ -> failwith "more instructions to be implemented"
   end
 
 let step (m:mach) : unit = 
   let rip = m.regs.(rind Rip) in
   let addr = map_addr rip in
-  let byte = get_from_mem addr m.mem in
+  let byte = get_sbyte_from_mem addr m.mem in
   let _ = begin match byte with
     | [InsB0 (op, args); _; _; _; _; _; _; _] -> 
       if !debug_simulator then print_endline @@ string_of_ins (op, args);
