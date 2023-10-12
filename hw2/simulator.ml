@@ -241,8 +241,17 @@ let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) =
     - set the condition flags
 *)
 
-let step (m:mach) : unit = failwith "step unimplemented"
+let execute (i:ins) (m:mach) : unit = 
+  failwith "execute unimplemented"
 
+let step (m:mach) : unit = 
+  let rip = m.regs.(rind Rip) in
+  let addr = map_addr rip in
+  let byte = get_from_mem addr m.mem in
+  begin match byte with
+    | [InsB0 i; _; _; _; _; _; _; _] -> 
+      execute i m;
+    | _ -> failwith "step: tried to interpret an invalid instruction!"
 
 
 
