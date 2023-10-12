@@ -182,6 +182,14 @@ let set_in_mem (addr:int option) (mm:mem) (bs:sbyte list) : unit =
     (* TODO: refactor to blit *)
   end
 
+let sign_bit (a: int64) : bool =
+  if ((Int64.compare a 0L) < 0) then true 
+  else false
+
+let same_sign (a: int64) (b: int64) : bool =
+  if (sign_bit a) = (sign_bit b) then true
+  else false
+
 (* Interpret an operand with respect to the given machine state. *)
 
 let interp_unary_operand (operands : operand list) (m:mach) : int = 
@@ -262,18 +270,52 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   begin match op with
   | Negq -> 
     let idx: int = interp_unary_operand args m in
-    begin match args with
-      | [Reg r] -> let data = Int64.neg m.regs.(idx) in (m.regs.(idx) <- data;
-                                                         Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0)))
+    let data = begin match args with
+      | [Reg _] -> let d1 = Int64.neg m.regs.(idx) in (m.regs.(idx) <- d1); d1
       | [Ind1 _]
       | [Ind2 _]
-      | [Ind3 _] -> let data = Int64.neg (int64_of_sbytes(get_from_mem (Some idx) m.mem)) in (set_in_mem (Some idx) m.mem (sbytes_of_int64 data); Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0)))
+      | [Ind3 _] -> let d2 = Int64.neg (int64_of_sbytes(get_from_mem (Some idx) m.mem)) in (set_in_mem (Some idx) m.mem (sbytes_of_int64 d2)); d2
       | _ -> failwith "execute: tried to interpret an invalid operand!"
-    end;
-
-    (* Int64.compare (Int64.min_int) m.regs.(idx) |> (fun x -> (m.flags.fo <- x = 0)); *)
-  
-    | Movq ->
+    end in
+    Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0));
+    m.flags.fz <- ((Int64.compare data 0L) = 0);
+    m.flags.fs <- sign_bit (data)
+  (* | Addq -> 
+     *)
+  | Subq ->
+    let (s, d) = interp_binary_operand args m in
+    let (s64, d64, r64) = begin match args with
+      | [_; Ind1 _] 
+      | [_; Ind2 _]
+      | [_; Ind3 _] -> let r1 = Int64.sub (int64_of_sbytes(get_from_mem (Some d) m.mem)) s in
+                      let temp = (int64_of_sbytes(get_from_mem (Some d) m.mem)) in
+                      set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
+                      (s, temp, r1)
+      | [_; Reg _] -> let r2 = Int64.sub m.regs.(d) s in 
+                      let temp = m.regs.(d) in 
+                      m.regs.(d) <- r2; 
+                      (s, temp, r2)
+      | _ -> failwith "execute: tried to interpret an invalid operand!"
+    end in
+    m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
+    m.flags.fz <- ((Int64.compare r64 0L) = 0);
+    m.flags.fs <- sign_bit (r64)
+  | Shlq ->
+    let (amt, d) = interp_binary_operand args m in
+    let (d64, r64) =
+    begin match args with
+    | [Imm _; Ind1 _]  
+    | [Imm _; Ind2 _] 
+    | [Imm _; Ind3 _] ->let r1 = Int64.shift_left (int64_of_sbytes(get_from_mem (Some d) m.mem)) amt in
+                        let temp = (int64_of_sbytes(get_from_mem (Some d) m.mem)) in
+                        set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
+                        (temp, r1)
+    | [Imm (Lit i); Reg r] -> failwith ""
+    | [Reg Rcx; Ind1 d] -> failwith ""
+    | [Reg Rcx; Ind2 d] -> failwith ""
+    | _ -> failwith ""
+    end in
+  | Movq ->
     let (s, d) = interp_binary_operand args m in
     begin match args with
       | [_; Ind1 _] 
@@ -282,9 +324,6 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [_; Reg _] -> m.regs.(d) <- s
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end;
-    Int64.compare s 0L |> (fun x -> (m.flags.fo <- x = 0));
-    Int64.compare s Int64.zero |> (fun x -> (m.flags.fz <- x = 0));
-    Int64.compare s Int64.min_int |> (fun x -> (m.flags.fs <- x = 0));
   | _ -> failwith "more instructions to be implemented"
   end
 
