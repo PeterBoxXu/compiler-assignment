@@ -167,6 +167,21 @@ let get_from_mem (addr:int option) (mm:mem) : sbyte list =
   | None -> raise X86lite_segfault
   | Some i -> mm.(i) :: mm.(i+1) :: mm.(i+2) :: mm.(i+3) :: mm.(i+4) :: mm.(i+5) :: mm.(i+6) :: mm.(i+7) :: []
 
+let set_in_mem (addr:int option) (mm:mem) (bs:sbyte list) : unit = 
+  match addr with 
+  | None -> raise X86lite_segfault
+  | Some i -> 
+    mm.(i) <- List.nth bs 0;
+    mm.(i+1) <- List.nth bs 1;
+    mm.(i+2) <- List.nth bs 2; 
+    mm.(i+3) <- List.nth bs 3; 
+    mm.(i+4) <- List.nth bs 4; 
+    mm.(i+5) <- List.nth bs 5; 
+    mm.(i+6) <- List.nth bs 6; 
+    mm.(i+7) <- List.nth bs 7  (* TODO: refactor to blit *)
+
+(* Interpret an operand with respect to the given machine state. *)
+
 let interp_unary_operand (operands : operand list) (m:mach) : int = 
   begin match operands with
   | [Imm _] -> failwith "interp_unary_operand: tried to interpret an immediate value!"
@@ -249,8 +264,10 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [Reg r] -> (m.regs.(idx) <- Int64.neg m.regs.(idx))
       | [Ind1 _]
       | [Ind2 _]
-      | [Ind3 _] -> ( Int64.neg int64_of_sbytes(get_from_mem (Some idx) m.mem)
-    end 
+      | [Ind3 _] -> set_in_mem (Some idx) m.mem (sbytes_of_int64 (Int64.neg (int64_of_sbytes(get_from_mem (Some idx) m.mem))))
+    end;
+    Int64.compare (Int64.min_int) m.regs.(idx) |> (fun x -> (m.flags.fo <- x = 0));
+     
   | _ -> failwith "lalala"
   end
 
