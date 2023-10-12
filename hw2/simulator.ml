@@ -161,20 +161,12 @@ let map_addr (addr:quad) : int option =
   else
     None 
 
+(* Accesses X86Lite memory array using the mapped index *)
 let get_from_mem (addr:int option) (mm:mem) : sbyte list = 
   match addr with 
   | None -> raise X86lite_segfault
   | Some i -> mm.(i) :: mm.(i+1) :: mm.(i+2) :: mm.(i+3) :: mm.(i+4) :: mm.(i+5) :: mm.(i+6) :: mm.(i+7) :: []
 
-(* let interp_operand (opn:operand) (m:mach) : quad =
-  match opn with
-  | Imm (Lbl l) -> failwith "interp_operand: tried to interpret a label!"
-  | Imm (Lit i) -> i
-  | Reg r -> rind r
-  | Ind1 (Lbl l) -> failwith "interp_operand: tried to interpret a label!"
-  | Ind1 (Lit i) -> i
-  | Ind2 r -> mm.regs.(rind r)
-  | Ind3 (Lbl l, reg r) -> failwith "interp_operand: tried to interpret a label!" *)
 
 let interp_unary_operand (operands : operand list) (m:mach) : int = 
   begin match operands with
@@ -196,14 +188,6 @@ let interp_unary_operand (operands : operand list) (m:mach) : int =
                           end
   | _ -> failwith "interp_unary_operand: tried to interpret an invalid operand!"
   end
-
-(* let interp_binary_operand (operands : operand list) : (int64 * int) = 
-  begin match operands with
-  | [Ind1 i, Ind1 j] -> 
-  | [(Ind1 | Ind2 | Ind3) _, (Ind1 | Ind2 | Ind3) _] -> failwith "interp_binary_operand: tried to interpret an invalid operand!"
-  | [_, Imm i] -> failwith "interp_binary_operand: tried to interpret an immediate value!"
-
-  end *)
 
 let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) = 
   begin match operands with 
@@ -255,17 +239,6 @@ let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) =
     - simulate the instruction semantics
     - update the registers and/or memory appropriately
     - set the condition flags
-*)
-(* let step (m:mach) : unit =
-  (* failwith "step unimplemented" *)
-  let rip = m.regs.(rind Rip) in 
-  let addr = map_addr rip in
-  let byte = m.mem.(addr) in
-  match byte with 
-  | InsFrag -> failwith "step: tried to interpret a fragment!"
-  | Byte c -> failwith "step: tried to interpret a byte!"
-  | InsB0 (op, args) -> 
-    match op with 
 *)
 
 let step (m:mach) : unit = failwith "step unimplemented"
