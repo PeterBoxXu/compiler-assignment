@@ -265,10 +265,22 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [Ind1 _]
       | [Ind2 _]
       | [Ind3 _] -> set_in_mem (Some idx) m.mem (sbytes_of_int64 (Int64.neg (int64_of_sbytes(get_from_mem (Some idx) m.mem))))
+      | _ -> failwith "execute: tried to interpret an invalid operand!"
     end;
     Int64.compare (Int64.min_int) m.regs.(idx) |> (fun x -> (m.flags.fo <- x = 0));
-     
-  | _ -> failwith "lalala"
+  | Movq ->
+    let (s, d) = interp_binary_operand args m in
+    begin match args with
+      | [_; Ind1 _] 
+      | [_; Ind2 _]
+      | [_; Ind3 _] -> set_in_mem (Some d) m.mem (sbytes_of_int64 s)
+      | [_; Reg _] -> m.regs.(d) <- s
+      | _ -> failwith "execute: tried to interpret an invalid operand!"
+    end;
+    Int64.compare s 0L |> (fun x -> (m.flags.fo <- x = 0));
+    Int64.compare s Int64.zero |> (fun x -> (m.flags.fz <- x = 0));
+    Int64.compare s Int64.min_int |> (fun x -> (m.flags.fs <- x = 0));
+  | _ -> failwith "more instructions to be implemented"
   end
 
 let step (m:mach) : unit = 
