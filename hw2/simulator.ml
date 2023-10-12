@@ -140,7 +140,7 @@ let sbytes_of_data : data -> sbyte list = function
      [if !debug_simulator then print_endline @@ string_of_ins u; ...]
 
 *)
-let debug_simulator = ref true
+let debug_simulator = ref false
 
 (* Interpret a condition code with respect to the given flags. *)
 let interp_cnd {fo; fs; fz} : cnd -> bool = fun x -> 
@@ -165,36 +165,20 @@ let map_addr (addr:quad) : int option =
 let get_from_mem (addr:int option) (mm:mem) : sbyte list = 
   match addr with 
   | None -> raise X86lite_segfault
-  | Some i -> print_string "get_from_mem: ";print_int i;print_newline(); mm.(i) :: mm.(i+1) :: mm.(i+2) :: mm.(i+3) :: mm.(i+4) :: mm.(i+5) :: mm.(i+6) :: mm.(i+7) :: []
+  | Some i -> mm.(i) :: mm.(i+1) :: mm.(i+2) :: mm.(i+3) :: mm.(i+4) :: mm.(i+5) :: mm.(i+6) :: mm.(i+7) :: []
 
 let set_in_mem (addr:int option) (mm:mem) (bs:sbyte list) : unit = 
   begin match addr with 
   | None -> raise X86lite_segfault
   | Some i -> 
-    print_string "set_in_mem: ";
-    print_int i;
-    print_newline();
-    print_int List.(length bs);
-    print_newline();
     mm.(i) <- List.nth bs 0;
-    print_string("0");
     mm.(i+1) <- List.nth bs 1;
-    print_string("1");
     mm.(i+2) <- List.nth bs 2; 
-    print_string("2");
-    mm.(i+3) <- List.nth bs 3; 
-    print_string("3");
-    mm.(i+4) <- List.nth bs 4; 
-    print_string("4");
-    mm.(i+5) <- List.nth bs 5; 
-    print_string("5");
-    mm.(i+6) <- List.nth bs 6; 
-    print_string("6");
+    mm.(i+3) <- List.nth bs 3;
+    mm.(i+4) <- List.nth bs 4;
+    mm.(i+5) <- List.nth bs 5;
+    mm.(i+6) <- List.nth bs 6;
     mm.(i+7) <- List.nth bs 7;
-    print_string("7"); 
-    print_newline();
-    print_string "----------";
-    print_newline();
     (* TODO: refactor to blit *)
   end
 
@@ -245,7 +229,7 @@ let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) =
       | Ind3 (Lbl l, r) -> failwith "interp_binary_operand: tried to interpret a label!"
       end in 
       let d = begin match dst with
-      | Imm i -> failwith "interp_binary_operand: tried to interpret an immediate value!"
+      | Imm i -> failwith "interp_binary_operand: tried to interpret an immediate value!!"
       | Reg r -> rind r
       | Ind1 (Lit i) -> begin match map_addr i with
                         | None -> raise X86lite_segfault
@@ -279,14 +263,17 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   | Negq -> 
     let idx: int = interp_unary_operand args m in
     begin match args with
-      | [Reg r] -> (m.regs.(idx) <- Int64.neg m.regs.(idx))
+      | [Reg r] -> let data = Int64.neg m.regs.(idx) in (m.regs.(idx) <- data;
+                                                         Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0)))
       | [Ind1 _]
       | [Ind2 _]
-      | [Ind3 _] -> set_in_mem (Some idx) m.mem (sbytes_of_int64 (Int64.neg (int64_of_sbytes(get_from_mem (Some idx) m.mem))))
+      | [Ind3 _] -> let data = Int64.neg (int64_of_sbytes(get_from_mem (Some idx) m.mem)) in (set_in_mem (Some idx) m.mem (sbytes_of_int64 data); Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0)))
       | _ -> failwith "execute: tried to interpret an invalid operand!"
-    end; print_int idx;
-    Int64.compare (Int64.min_int) m.regs.(idx) |> (fun x -> (m.flags.fo <- x = 0));
-  | Movq ->
+    end;
+
+    (* Int64.compare (Int64.min_int) m.regs.(idx) |> (fun x -> (m.flags.fo <- x = 0)); *)
+  
+    | Movq ->
     let (s, d) = interp_binary_operand args m in
     begin match args with
       | [_; Ind1 _] 
