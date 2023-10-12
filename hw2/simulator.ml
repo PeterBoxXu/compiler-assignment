@@ -167,7 +167,6 @@ let get_from_mem (addr:int option) (mm:mem) : sbyte list =
   | None -> raise X86lite_segfault
   | Some i -> mm.(i) :: mm.(i+1) :: mm.(i+2) :: mm.(i+3) :: mm.(i+4) :: mm.(i+5) :: mm.(i+6) :: mm.(i+7) :: []
 
-
 let interp_unary_operand (operands : operand list) (m:mach) : int = 
   begin match operands with
   | [Imm _] -> failwith "interp_unary_operand: tried to interpret an immediate value!"
@@ -241,21 +240,30 @@ let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) =
     - set the condition flags
 *)
 
-let execute (i:ins) (m:mach) : unit = 
-  failwith "execute unimplemented"
+let execute (op: opcode) (args: operand list) (m:mach) : unit = 
+  (* failwith "execute unimplemented" *)
+  begin match op with
+  | Negq -> 
+    let idx: int = interp_unary_operand args m in
+    begin match args with
+      | [Reg r] -> (m.regs.(idx) <- Int64.neg m.regs.(idx))
+      | [Ind1 _]
+      | [Ind2 _]
+      | [Ind3 _] -> ( Int64.neg int64_of_sbytes(get_from_mem (Some idx) m.mem)
+    end 
+  | _ -> failwith "lalala"
+  end
 
 let step (m:mach) : unit = 
   let rip = m.regs.(rind Rip) in
   let addr = map_addr rip in
   let byte = get_from_mem addr m.mem in
-  begin match byte with
-    | [InsB0 i; _; _; _; _; _; _; _] -> 
-      execute i m;
+  let _ = begin match byte with
+    | [InsB0 (op, args); _; _; _; _; _; _; _] -> 
+      execute op args m;
     | _ -> failwith "step: tried to interpret an invalid instruction!"
-
-
-
-
+  end in
+  m.regs.(rind Rip) <- Int64.add m.regs.(rind Rip) 8L
 
 (* Runs the machine until the rip register reaches a designated
    memory address. Returns the contents of %rax when the 
