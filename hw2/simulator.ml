@@ -16,6 +16,7 @@ let nregs = 17                   (* including Rip *)
 let ins_size = 8L                (* assume we have a 8-byte encoding *)
 let exit_addr = 0xfdeadL         (* halt when m.regs(%rip) = exit_addr *)
 
+let clear_lower_byte = 0xFFFFFFFFFFFFFF00L
 (* Your simulator should raise this exception if it tries to read from or
    store to an address not within the valid address space. *)
 exception X86lite_segfault
@@ -190,6 +191,13 @@ let set_in_mem (addr:int option) (mm:mem) (bs:sbyte list) : unit =
     (* TODO: refactor to blit *)
   end
 
+let set_in_byte (addr:int option) (mm:mem) (value: int64) : unit =
+  let list_of_value = sbytes_of_int64 value in
+  begin match addr with
+  | None -> raise X86lite_segfault
+  | Some i ->
+    mm.(i) <- List.nth list_of_value 0
+  end
 
 (* -------------------------------- Helper: Sign Computation -------------------------------- *)
 let sign_bit (a: int64) : bool =
@@ -362,8 +370,17 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
           m.flags.fo <- true
         else
           m.flags.fo <- false
-
-      
+  (* TODO: More test of Set.*)
+  | Set c -> 
+    let dst = interp_unary_operand args m in
+    let data = Int64.of_int (Bool.to_int (interp_cnd m.flags c)) in
+    begin match args with
+    | [Reg _] -> (m.regs.(dst) <- Int64.add data (Int64.logand clear_lower_byte m.regs.(dst)))
+    | [Ind1 _]
+    | [Ind2 _]
+    | [Ind3 _] -> set_in_byte (Some dst) m.mem data
+    | _ -> failwith ""
+    end
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Data-movement Instructions --------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
