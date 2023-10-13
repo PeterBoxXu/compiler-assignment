@@ -191,6 +191,9 @@ let set_in_mem (addr:int option) (mm:mem) (bs:sbyte list) : unit =
     (* TODO: refactor to blit *)
   end
 
+let set_int64_in_mem (addr:int option) (mm:mem) (value: int64) : unit =
+  set_in_mem addr mm (sbytes_of_int64 value)
+
 let set_in_byte (addr:int option) (mm:mem) (value: int64) : unit =
   let list_of_value = sbytes_of_int64 value in
   begin match addr with
@@ -306,7 +309,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [Reg _] -> let d1 = Int64.neg m.regs.(idx) in (m.regs.(idx) <- d1); d1
       | [Ind1 _]
       | [Ind2 _]
-      | [Ind3 _] -> let d2 = Int64.neg (get_int64_from_mem (Some idx) m.mem) in (set_in_mem (Some idx) m.mem (sbytes_of_int64 d2)); d2
+      | [Ind3 _] -> let d2 = Int64.neg (get_int64_from_mem (Some idx) m.mem) in (set_int64_in_mem (Some idx) m.mem d2); d2
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end in
     Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0));
@@ -319,7 +322,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     | [_ ; Ind3 _] -> 
       let r1 = Int64.add (get_int64_from_mem (Some d) m.mem) s in
       let temp = (get_int64_from_mem (Some d) m.mem) in
-      set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
+      set_int64_in_mem (Some d) m.mem r1;
       (s, temp, r1)
     | [_; Reg _] ->
       let r2 = Int64.add m.regs.(d) s in 
@@ -338,7 +341,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [_; Ind3 _] -> 
         let r1 = Int64.sub (get_int64_from_mem (Some d) m.mem) s in
         let temp = (get_int64_from_mem (Some d) m.mem) in
-        set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
+        set_int64_in_mem (Some d) m.mem r1;
         (s, temp, r1)
       | [_; Reg _] -> 
         let r2 = Int64.sub m.regs.(d) s in 
@@ -353,8 +356,23 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Logic Instructions ----------------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
-
-
+  | Andq ->
+    let (s, d) = interp_binary_operand args m in
+    let r64 = begin match args with
+    | [_; Ind1 _] 
+    | [_; Ind2 _]
+    | [_; Ind3 _] -> 
+      let r = (Int64.logand s (get_int64_from_mem (Some d) m.mem)) in
+      set_int64_in_mem (Some d) m.mem r;
+      r
+    | [_; Reg _] -> 
+      let r = (Int64.logand s m.regs.(d)) in
+      m.regs.(d) <- r;
+      r
+    | _ -> failwith "execute: tried to interpret an invalid operand!"
+    end in
+    set_SF_and_ZF r64 m;
+    m.flags.fo <- false
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Bit-manipulation Instructions ------------------------------ *)
   (* ------------------------------------------------------------------------------------------------ *)
@@ -372,7 +390,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     | [Reg Rcx; Ind3 _] ->
       let r1 = Int64.shift_left (get_int64_from_mem (Some d) m.mem) (Int64.to_int amt) in
       let temp = (get_int64_from_mem (Some d) m.mem) in
-      set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
+      set_int64_in_mem (Some d) m.mem r1;
       (temp, r1)
     | [Imm _; Reg _] 
     | [Reg Rcx; Reg _]-> 
@@ -409,7 +427,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     begin match args with
       | [_; Ind1 _] 
       | [_; Ind2 _]
-      | [_; Ind3 _] -> set_in_mem (Some d) m.mem (sbytes_of_int64 s)
+      | [_; Ind3 _] -> set_int64_in_mem (Some d) m.mem s
       | [_; Reg _] -> m.regs.(d) <- s
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end;
