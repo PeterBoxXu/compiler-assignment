@@ -311,21 +311,40 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     end in
     Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0));
     set_SF_and_ZF data m
-  (* | Addq -> 
-     *)
+  | Addq ->
+    let (s, d) = interp_binary_operand args m in 
+    let (s64, d64, r64) = begin match args with
+    | [_ ; Ind1 _]
+    | [_ ; Ind2 _]
+    | [_ ; Ind3 _] -> 
+      let r1 = Int64.add (get_int64_from_mem (Some d) m.mem) s in
+      let temp = (get_int64_from_mem (Some d) m.mem) in
+      set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
+      (s, temp, r1)
+    | [_; Reg _] ->
+      let r2 = Int64.add m.regs.(d) s in 
+      let temp = m.regs.(d) in 
+      m.regs.(d) <- r2; 
+      (s, temp, r2)
+    | _ -> failwith ""
+    end in
+    m.flags.fo <- ( (same_sign d64 s64) && not (same_sign r64 s64) );
+    set_SF_and_ZF r64 m
   | Subq ->
     let (s, d) = interp_binary_operand args m in
     let (s64, d64, r64) = begin match args with
       | [_; Ind1 _] 
       | [_; Ind2 _]
-      | [_; Ind3 _] -> let r1 = Int64.sub (get_int64_from_mem (Some d) m.mem) s in
-                      let temp = (get_int64_from_mem (Some d) m.mem) in
-                      set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
-                      (s, temp, r1)
-      | [_; Reg _] -> let r2 = Int64.sub m.regs.(d) s in 
-                      let temp = m.regs.(d) in 
-                      m.regs.(d) <- r2; 
-                      (s, temp, r2)
+      | [_; Ind3 _] -> 
+        let r1 = Int64.sub (get_int64_from_mem (Some d) m.mem) s in
+        let temp = (get_int64_from_mem (Some d) m.mem) in
+        set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
+        (s, temp, r1)
+      | [_; Reg _] -> 
+        let r2 = Int64.sub m.regs.(d) s in 
+        let temp = m.regs.(d) in 
+        m.regs.(d) <- r2; 
+        (s, temp, r2)
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end in
     m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
