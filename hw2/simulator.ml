@@ -200,6 +200,14 @@ let same_sign (a: int64) (b: int64) : bool =
   if (sign_bit a) = (sign_bit b) then true
   else false
 
+let top_two_diff (a: int64): bool = 
+  if ((Int64.compare a 0L) < 0) && (Int64.compare (Int64.shift_left a 1) 0L >= 0) then true
+  else if ((Int64.compare a 0L) >= 0) && (Int64.compare (Int64.shift_left a 1) 0L < 0) then true
+  else false
+(* -------------------------------- Helper: Set SF and ZF -------------------------------- *)
+let set_SF_and_ZF (r64: int64) (m:mach): unit =
+  m.flags.fz <- ((Int64.compare r64 0L) = 0);
+  m.flags.fs <- sign_bit (r64)
   
 (* -------------------------------- Helper: Interpret Operands -------------------------------- *)
 
@@ -294,8 +302,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end in
     Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0));
-    m.flags.fz <- ((Int64.compare data 0L) = 0);
-    m.flags.fs <- sign_bit (data)
+    set_SF_and_ZF data m
   (* | Addq -> 
      *)
   | Subq ->
@@ -314,8 +321,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end in
     m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
-    m.flags.fz <- ((Int64.compare r64 0L) = 0);
-    m.flags.fs <- sign_bit (r64)
+    set_SF_and_ZF r64 m
 
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Logic Instructions ----------------------------------------- *)
@@ -326,22 +332,38 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ----------------------------------- Bit-manipulation Instructions ------------------------------ *)
   (* ------------------------------------------------------------------------------------------------ *)
 
-  (* | Shlq ->
+  | Shlq ->
     let (amt, d) = interp_binary_operand args m in
     let (d64, r64) =
+    assert (amt >= 0L && amt < 64L); (* TODO: Should handle exception*)
     begin match args with
     | [Imm _; Ind1 _]  
     | [Imm _; Ind2 _] 
-    | [Imm _; Ind3 _] ->let r1 = Int64.shift_left (int64_of_sbytes(get_from_mem (Some d) m.mem)) amt in
-                        let temp = (int64_of_sbytes(get_from_mem (Some d) m.mem)) in
-                        set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
-                        (temp, r1)
-    | [Imm (Lit i); Reg r] -> failwith ""
-    | [Reg Rcx; Ind1 d] -> failwith ""
-    | [Reg Rcx; Ind2 d] -> failwith ""
+    | [Imm _; Ind3 _] 
+    | [Reg Rcx; Ind1 _] 
+    | [Reg Rcx; Ind2 _] 
+    | [Reg Rcx; Ind3 _] ->
+      let r1 = Int64.shift_left (get_int64_from_mem (Some d) m.mem) (Int64.to_int amt) in
+      let temp = (get_int64_from_mem (Some d) m.mem) in
+      set_in_mem (Some d) m.mem (sbytes_of_int64 r1);
+      (temp, r1)
+    | [Imm _; Reg _] 
+    | [Reg Rcx; Reg _]-> 
+      let r1 = Int64.shift_left (m.regs.(d)) (Int64.to_int amt) in
+      let temp = (get_int64_from_mem (Some d) m.mem) in
+      m.regs.(d) <- r1;
+      (temp, r1)
     | _ -> failwith ""
-    end in *)
+    end in
+    if not (Int64.equal amt 0L) then
+      set_SF_and_ZF r64 m;
+      if (Int64.equal amt 1L) then
+        if top_two_diff d64 then
+          m.flags.fo <- true
+        else
+          m.flags.fo <- false
 
+      
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Data-movement Instructions --------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
@@ -359,7 +381,21 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Control-flow and condition --------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
-
+  | Cmpq ->
+    let (s, d) = interp_binary_operand args m in
+    let (s64, d64, r64) = begin match args with
+      | [_; Ind1 _] 
+      | [_; Ind2 _]
+      | [_; Ind3 _] -> let r1 = Int64.sub (get_int64_from_mem (Some d) m.mem) s in
+                      let temp = (get_int64_from_mem (Some d) m.mem) in
+                      (s, temp, r1)
+      | [_; Reg _] -> let r2 = Int64.sub m.regs.(d) s in 
+                      let temp = m.regs.(d) in 
+                      (s, temp, r2)
+      | _ -> failwith "execute: tried to interpret an invalid operand!"
+    end in
+    m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
+    set_SF_and_ZF r64 m
   | _ -> failwith "more instructions to be implemented"
   end
 
