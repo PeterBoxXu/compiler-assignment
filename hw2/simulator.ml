@@ -395,6 +395,19 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     end in
     m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
     set_SF_and_ZF r64 m
+  | Imulq -> 
+    let (s, d) = interp_binary_operand args m in
+    let (s64, d64, r64) = begin match args with
+      | [_; Reg _] -> 
+        let r1 = Int64.mul (m.regs.(d)) s in
+        let temp = m.regs.(d) in
+        m.regs.(d) <- r1;
+        (s, temp, r1)
+      | _ -> failwith "execute: tried to interpret an invalid operand!"
+    end in
+    m.flags.fo <- ((Int64.compare s64 0L) <> 0) && ((Int64.div r64 s64) <> d64);
+    (* flag fz and fs are undefined *)
+
 
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Logic Instructions ----------------------------------------- *)
