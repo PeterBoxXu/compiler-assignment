@@ -317,6 +317,32 @@ let logic_operation (args: operand list) (m: mach) (operation: quad -> quad -> q
   set_SF_and_ZF r64 m;
   m.flags.fo <- false
 
+(* -------------------------------- Helper: Shift Operation -------------------------------- *)
+let shift_operation (args: operand list) (m:mach) (operation: quad -> int -> quad): int64 * int64 * int64 =
+  let (amt, d) = interp_binary_operand args m in
+  let (d64, r64) =
+  assert (amt >= 0L && amt < 64L); (* TODO: Should handle exception*)
+  begin match args with
+  | [Imm _; Ind1 _]  
+  | [Imm _; Ind2 _] 
+  | [Imm _; Ind3 _] 
+  | [Reg Rcx; Ind1 _] 
+  | [Reg Rcx; Ind2 _] 
+  | [Reg Rcx; Ind3 _] ->
+    let r1 = operation (get_int64_from_mem (Some d) m.mem) (Int64.to_int amt) in
+    let temp = (get_int64_from_mem (Some d) m.mem) in
+    set_int64_in_mem (Some d) m.mem r1;
+    (temp, r1)
+  | [Imm _; Reg _] 
+  | [Reg Rcx; Reg _]-> 
+    let r1 = operation (m.regs.(d)) (Int64.to_int amt) in
+    let temp = (get_int64_from_mem (Some d) m.mem) in
+    m.regs.(d) <- r1;
+    (temp, r1)
+  | _ -> failwith ""
+  end in
+  (amt, d64, r64)
+
 (* -------------------------------- Helper: Data Storage -------------------------------- *)
 let popq_into_dst (args: operand list) (m:mach): unit =
   let d = interp_unary_operand args m in
@@ -428,28 +454,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ------------------------------------------------------------------------------------------------ *)
 
   | Shlq ->
-    let (amt, d) = interp_binary_operand args m in
-    let (d64, r64) =
-    assert (amt >= 0L && amt < 64L); (* TODO: Should handle exception*)
-    begin match args with
-    | [Imm _; Ind1 _]  
-    | [Imm _; Ind2 _] 
-    | [Imm _; Ind3 _] 
-    | [Reg Rcx; Ind1 _] 
-    | [Reg Rcx; Ind2 _] 
-    | [Reg Rcx; Ind3 _] ->
-      let r1 = Int64.shift_left (get_int64_from_mem (Some d) m.mem) (Int64.to_int amt) in
-      let temp = (get_int64_from_mem (Some d) m.mem) in
-      set_int64_in_mem (Some d) m.mem r1;
-      (temp, r1)
-    | [Imm _; Reg _] 
-    | [Reg Rcx; Reg _]-> 
-      let r1 = Int64.shift_left (m.regs.(d)) (Int64.to_int amt) in
-      let temp = (get_int64_from_mem (Some d) m.mem) in
-      m.regs.(d) <- r1;
-      (temp, r1)
-    | _ -> failwith ""
-    end in
+    let (amt, d64, r64) = shift_operation args m Int64.shift_left in
     if not (Int64.equal amt 0L) then
       set_SF_and_ZF r64 m;
       if (Int64.equal amt 1L) then
@@ -457,6 +462,16 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
           m.flags.fo <- true
         else
           m.flags.fo <- false
+  | Shrq ->
+    let (amt, d64, r64) = shift_operation args m Int64.shift_right_logical in
+    if not (Int64.equal amt 0L) then
+      m.flags.fs <- sign_bit r64;
+      if (Int64.equal r64 0L) then
+        m.flags.fz <- true;
+      else
+        m.flags.fz <- false;
+      if (Int64.equal amt 1L) then
+        m.flags.fo <- sign_bit d64
   (* TODO: More test of Set.*)
   | Set c -> 
     let dst = interp_unary_operand args m in
@@ -473,7 +488,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ------------------------------------------------------------------------------------------------ *)
   | Leaq ->
     begin match args with
-    | [src, dst] -> 
+    | [src; dst] -> 
       let s = begin match src with
       | Ind1 (Lit i) -> i
       | Ind1 (Lbl l) -> failwith "execute: tried to interpret a label!"
