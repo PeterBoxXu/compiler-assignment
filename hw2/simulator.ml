@@ -452,26 +452,37 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Bit-manipulation Instructions ------------------------------ *)
   (* ------------------------------------------------------------------------------------------------ *)
-
-  | Shlq ->
-    let (amt, d64, r64) = shift_operation args m Int64.shift_left in
-    if not (Int64.equal amt 0L) then
+  | Sarq -> 
+    let (amt, d64, r64) = shift_operation args m Int64.shift_right in
+    if not (Int64.equal amt 0L) then begin
       set_SF_and_ZF r64 m;
       if (Int64.equal amt 1L) then
-        if top_two_diff d64 then
+        m.flags.fo <- false
+    end
+  | Shlq ->
+    let (amt, d64, r64) = shift_operation args m Int64.shift_left in
+    if not (Int64.equal amt 0L) then begin
+      set_SF_and_ZF r64 m;
+      if (Int64.equal amt 1L) then begin
+        if top_two_diff d64 then 
           m.flags.fo <- true
         else
           m.flags.fo <- false
+      end 
+    end
   | Shrq ->
     let (amt, d64, r64) = shift_operation args m Int64.shift_right_logical in
-    if not (Int64.equal amt 0L) then
+    if not (Int64.equal amt 0L) then begin
       m.flags.fs <- sign_bit r64;
       if (Int64.equal r64 0L) then
         m.flags.fz <- true
-      else 
-        m.flags.fz <- false;
-      if (Int64.equal amt 1L) then
+      else begin
+        m.flags.fz <- false
+      end;
+      if (Int64.equal amt 1L) then begin
         m.flags.fo <- sign_bit d64
+      end
+    end
   (* TODO: More test of Set.*)
   | Set c -> 
     let dst = interp_unary_operand args m in
