@@ -245,6 +245,16 @@ let interp_unary_operand (operands : operand list) (m:mach) : int =
   | _ -> failwith "interp_unary_operand: tried to interpret an invalid operand!"
   end
 
+let interp_unary_source (operands: operand list) (m: mach) : int64 =
+  begin match operands with
+  | [Imm (Lit i)] -> i
+  | [Reg _] -> m.regs.(interp_unary_operand operands m)
+  | [Ind1 (Lit _)]
+  | [Ind2 _]
+  | [Ind3 (Lit _, _)] -> get_int64_from_mem (Some (interp_unary_operand operands m) ) m.mem
+  | _ -> failwith "interp_unary_source: tried to interpret invalid operand!"
+  end
+
 let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) = 
   begin match operands with 
   | [Ind1 _; Ind1 _]
@@ -438,11 +448,14 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [_; Reg _] -> m.regs.(d) <- s
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end;
-  (* | Pushq ->
-    let s_idx = interp_unary_operand args m ins_size
-    begin match args with 
+  | Pushq ->
+    let s = interp_unary_source args m in
+    m.regs.(rind Rsp) <- Int64.sub m.regs.(rind Rsp) 8L;
+    set_int64_in_mem (map_addr m.regs.(rind Rsp)) m.mem s
+  (* | Popq ->
+    let d = interp_unary_operand args m in
+    let data = get_int64_from_mem (map_addr m.regs.(rind Rsp)) m.mem in
     () *)
-
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Control-flow and condition --------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
