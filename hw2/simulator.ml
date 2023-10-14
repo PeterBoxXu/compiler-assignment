@@ -215,6 +215,7 @@ let top_two_diff (a: int64): bool =
   if ((Int64.compare a 0L) < 0) && (Int64.compare (Int64.shift_left a 1) 0L >= 0) then true
   else if ((Int64.compare a 0L) >= 0) && (Int64.compare (Int64.shift_left a 1) 0L < 0) then true
   else false
+
 (* -------------------------------- Helper: Set SF and ZF -------------------------------- *)
 let set_SF_and_ZF (r64: int64) (m:mach): unit =
   m.flags.fz <- ((Int64.compare r64 0L) = 0);
@@ -287,6 +288,25 @@ let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) =
   | _ -> failwith "interp_binary_operand: tried to interpret an invalid operand!"
     end
 
+(* -------------------------------- Helper: Logic Operation -------------------------------- *)
+let logic_operation (args: operand list) (m: mach) (operation: quad -> quad -> quad): unit =
+  let (s, d) = interp_binary_operand args m in
+  let r64 = begin match args with
+  | [_; Ind1 _] 
+  | [_; Ind2 _]
+  | [_; Ind3 _] -> 
+    let r = (operation s (get_int64_from_mem (Some d) m.mem)) in
+    set_int64_in_mem (Some d) m.mem r;
+    r
+  | [_; Reg _] -> 
+    let r = (operation s m.regs.(d)) in
+    m.regs.(d) <- r;
+    r
+  | _ -> failwith "execute: tried to interpret an invalid operand!"
+  end in
+  set_SF_and_ZF r64 m;
+  m.flags.fo <- false
+
 (* Simulates one step of the machine:
     - fetch the instruction at %rip
     - compute the source and/or destination information from the operands
@@ -356,23 +376,10 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Logic Instructions ----------------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
-  | Andq ->
-    let (s, d) = interp_binary_operand args m in
-    let r64 = begin match args with
-    | [_; Ind1 _] 
-    | [_; Ind2 _]
-    | [_; Ind3 _] -> 
-      let r = (Int64.logand s (get_int64_from_mem (Some d) m.mem)) in
-      set_int64_in_mem (Some d) m.mem r;
-      r
-    | [_; Reg _] -> 
-      let r = (Int64.logand s m.regs.(d)) in
-      m.regs.(d) <- r;
-      r
-    | _ -> failwith "execute: tried to interpret an invalid operand!"
-    end in
-    set_SF_and_ZF r64 m;
-    m.flags.fo <- false
+  | Andq -> logic_operation args m Int64.logand
+  | Orq -> logic_operation args m Int64.logor
+  | Xorq -> logic_operation args m Int64.logxor
+
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Bit-manipulation Instructions ------------------------------ *)
   (* ------------------------------------------------------------------------------------------------ *)
@@ -431,6 +438,10 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [_; Reg _] -> m.regs.(d) <- s
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end;
+  (* | Pushq ->
+    let s_idx = interp_unary_operand args m ins_size
+    begin match args with 
+    () *)
 
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Control-flow and condition --------------------------------- *)
