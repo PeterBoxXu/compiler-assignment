@@ -485,8 +485,14 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     end in
     m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
     set_SF_and_ZF r64 m
+
+
+  (* Caution: Maybe wrong! Because +8 after each step*)
+  (* | Jmp -> 
+    let s = interp_unary_source args m in
+    m.regs.(rind Rip) <- s
   | Retq ->
-    popq_into_dst [Reg Rip] m
+    popq_into_dst [Reg Rip] m *)
   
   | _ -> failwith "more instructions to be implemented"
   end
