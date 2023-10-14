@@ -467,8 +467,8 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     if not (Int64.equal amt 0L) then
       m.flags.fs <- sign_bit r64;
       if (Int64.equal r64 0L) then
-        m.flags.fz <- true;
-      else
+        m.flags.fz <- true
+      else 
         m.flags.fz <- false;
       if (Int64.equal amt 1L) then
         m.flags.fo <- sign_bit d64
