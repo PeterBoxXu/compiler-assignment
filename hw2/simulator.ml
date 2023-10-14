@@ -317,6 +317,19 @@ let logic_operation (args: operand list) (m: mach) (operation: quad -> quad -> q
   set_SF_and_ZF r64 m;
   m.flags.fo <- false
 
+(* -------------------------------- Helper: Data Storage -------------------------------- *)
+let popq_into_dst (args: operand list) (m:mach): unit =
+  let d = interp_unary_operand args m in
+  let data = get_int64_from_mem (map_addr m.regs.(rind Rsp)) m.mem in
+  begin match args with
+  | [Reg _] -> m.regs.(d) <- data
+  | [Ind1 _] 
+  | [Ind2 _]
+  | [Ind3 _] -> set_int64_in_mem (Some d) m.mem data
+  | _ -> failwith "execute popq: tried to interpret an invalid operand!"
+  end;
+  m.regs.(rind Rsp) <- Int64.add m.regs.(rind Rsp) 8L
+
 (* Simulates one step of the machine:
     - fetch the instruction at %rip
     - compute the source and/or destination information from the operands
@@ -452,10 +465,8 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     let s = interp_unary_source args m in
     m.regs.(rind Rsp) <- Int64.sub m.regs.(rind Rsp) 8L;
     set_int64_in_mem (map_addr m.regs.(rind Rsp)) m.mem s
-  (* | Popq ->
-    let d = interp_unary_operand args m in
-    let data = get_int64_from_mem (map_addr m.regs.(rind Rsp)) m.mem in
-    () *)
+  | Popq ->
+    popq_into_dst args m 
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Control-flow and condition --------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
@@ -474,6 +485,9 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     end in
     m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
     set_SF_and_ZF r64 m
+  | Retq ->
+    popq_into_dst [Reg Rip] m
+  
   | _ -> failwith "more instructions to be implemented"
   end
 
