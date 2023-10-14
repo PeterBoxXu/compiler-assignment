@@ -297,6 +297,28 @@ let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) =
       end in (s, d)
   | _ -> failwith "interp_binary_operand: tried to interpret an invalid operand!"
     end
+(* -------------------------------- Helper: Arithmatic Operation -------------------------------- *)
+let add_and_set_flags (args: operand list) (m: mach): int64 =
+  let (s, d) = interp_binary_operand args m in 
+  let (s64, d64, r64) = begin match args with
+  | [_ ; Ind1 _]
+  | [_ ; Ind2 _]
+  | [_ ; Ind3 _] -> 
+    let r1 = Int64.add (get_int64_from_mem (Some d) m.mem) s in
+    let temp = (get_int64_from_mem (Some d) m.mem) in
+    set_int64_in_mem (Some d) m.mem r1;
+    (s, temp, r1)
+  | [_; Reg _] ->
+    let r2 = Int64.add m.regs.(d) s in 
+    let temp = m.regs.(d) in 
+    m.regs.(d) <- r2; 
+    (s, temp, r2)
+  | _ -> failwith ""
+  end in
+  m.flags.fo <- ( (same_sign d64 s64) && not (same_sign r64 s64) );
+  set_SF_and_ZF r64 m;
+  s64
+
 
 (* -------------------------------- Helper: Logic Operation -------------------------------- *)
 let logic_operation (args: operand list) (m: mach) (operation: quad -> quad -> quad): unit =
@@ -440,7 +462,19 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     end in
     m.flags.fo <- ((Int64.compare s64 0L) <> 0) && ((Int64.div r64 s64) <> d64);
     (* flag fz and fs are undefined *)
-
+  | Incq ->
+    let src = interp_unary_operand args m in
+    let s64 = interp_unary_source args m in
+    let r64 = Int64.succ s64 in
+    begin match args with
+    | [Reg _] -> m.regs.(src) <- r64
+    | [Ind1 _]
+    | [Ind2 _]
+    | [Ind3 _] -> set_int64_in_mem (Some src) m.mem r64
+    | _ -> failwith "execute_incq: tried to interpret an invalid operand"
+    end;
+    set_SF_and_ZF r64 m;
+    m.flags.fo <- (same_sign 1L s64) && (same_sign (-1L) r64)
 
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Logic Instructions ----------------------------------------- *)
