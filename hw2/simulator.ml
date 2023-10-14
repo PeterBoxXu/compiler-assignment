@@ -330,6 +330,13 @@ let popq_into_dst (args: operand list) (m:mach): unit =
   end;
   m.regs.(rind Rsp) <- Int64.add m.regs.(rind Rsp) 8L
 
+let push_into_stack (args: operand list) (m:mach): unit =
+  let s = interp_unary_source args m in
+  m.regs.(rind Rsp) <- Int64.sub m.regs.(rind Rsp) 8L;
+  set_int64_in_mem (map_addr m.regs.(rind Rsp)) m.mem s
+  
+(* -------------------------------- Helper: Print -------------------------------- *)
+
 (* Simulates one step of the machine:
     - fetch the instruction at %rip
     - compute the source and/or destination information from the operands
@@ -464,6 +471,27 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Data-movement Instructions --------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
+  | Leaq ->
+    begin match args with
+    | [src, dst] -> 
+      let s = begin match src with
+      | Ind1 (Lit i) -> i
+      | Ind1 (Lbl l) -> failwith "execute: tried to interpret a label!"
+      | Ind2 r -> m.regs.(rind r)
+      | Ind3 (Lit i, r) -> Int64.add m.regs.(rind r) i
+      | _ -> failwith "execute: tried to interpret an invalid operand!"
+      end in 
+      let d = interp_unary_operand [dst] m in
+      begin match dst with
+      | Reg _ -> m.regs.(d) <- s
+      | Ind1 _
+      | Ind2 _
+      | Ind3 _ -> set_int64_in_mem (Some d) m.mem s
+      | _ -> failwith "execute: tried to interpret an invalid operand!"
+      end
+    | _ -> failwith "execute: tried to interpret an invalid operand!"
+    end
+
 
   | Movq ->
     let (s, d) = interp_binary_operand args m in
@@ -474,10 +502,8 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | [_; Reg _] -> m.regs.(d) <- s
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end;
-  | Pushq ->
-    let s = interp_unary_source args m in
-    m.regs.(rind Rsp) <- Int64.sub m.regs.(rind Rsp) 8L;
-    set_int64_in_mem (map_addr m.regs.(rind Rsp)) m.mem s
+  | Pushq -> 
+    push_into_stack args m
   | Popq ->
     popq_into_dst args m 
   (* ------------------------------------------------------------------------------------------------ *)
@@ -499,14 +525,21 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
     set_SF_and_ZF r64 m
 
-
-  (* Caution: Maybe wrong! Because +8 after each step*)
   | Jmp -> 
     let s = interp_unary_source args m in
     m.regs.(rind Rip) <- Int64.sub s 8L
+  | Callq ->
+    push_into_stack [Reg Rip] m;
+    m.regs.(rind Rip) <- Int64.sub (interp_unary_source args m) 8L
+
   | Retq ->
     popq_into_dst [Reg Rip] m;
     m.regs.(rind Rip) <- Int64.sub m.regs.(rind Rip) 8L
+  | J c ->
+    let s = interp_unary_source args m in
+    if (interp_cnd m.flags c) then
+      m.regs.(rind Rip) <- Int64.sub s 8L
+  
   
   | _ -> failwith "more instructions to be implemented"
   end
