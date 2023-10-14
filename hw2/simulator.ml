@@ -501,11 +501,12 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
 
 
   (* Caution: Maybe wrong! Because +8 after each step*)
-  (* | Jmp -> 
+  | Jmp -> 
     let s = interp_unary_source args m in
-    m.regs.(rind Rip) <- s
+    m.regs.(rind Rip) <- Int64.sub s 8L
   | Retq ->
-    popq_into_dst [Reg Rip] m *)
+    popq_into_dst [Reg Rip] m;
+    m.regs.(rind Rip) <- Int64.sub m.regs.(rind Rip) 8L
   
   | _ -> failwith "more instructions to be implemented"
   end
