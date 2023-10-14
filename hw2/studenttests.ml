@@ -57,10 +57,10 @@ let provided_tests : suite = [
   ]);
   Test ("Debug_interp_unary", [
     ("interp_unary_Ind1", assert_eqf (fun () -> 
-      interp_unary_operand [Ind1 (Lit 0x400010L)] interp_mach) (16));
+      interp_unary_opn_index [Ind1 (Lit 0x400010L)] interp_mach) (16));
     ("interp_unary_Ind2", assert_eqf (fun () ->
-      interp_unary_operand [Ind2 (Rbx)] interp_mach) (8));
+      interp_unary_opn_index [Ind2 (Rbx)] interp_mach) (8));
     ("interp_unary_Ind3", assert_eqf (fun () ->
-      interp_unary_operand [Ind3 (Lit 8L, Rbx)] interp_mach) (16));
+      interp_unary_opn_index [Ind3 (Lit 8L, Rbx)] interp_mach) (16));
   ]);
 ] 

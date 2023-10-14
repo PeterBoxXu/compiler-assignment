@@ -218,21 +218,21 @@ let top_two_diff (a: int64): bool =
 
 (* -------------------------------- Helper: Set SF and ZF -------------------------------- *)
 let set_SF_and_ZF (r64: int64) (m:mach): unit =
-  m.flags.fz <- ((Int64.compare r64 0L) = 0);
+  m.flags.fz <- (Int64.equal r64 0L);
   m.flags.fs <- sign_bit (r64)
   
 (* -------------------------------- Helper: Interpret Operands -------------------------------- *)
 
 (* Interpret an operand with respect to the given machine state. *)
-let interp_unary_operand (operands : operand list) (m:mach) : int = 
+let interp_unary_opn_index (operands : operand list) (m:mach) : int = 
   begin match operands with
-  | [Imm _] -> failwith "interp_unary_operand: tried to interpret an immediate value!"
+  | [Imm _] -> failwith "interp_unary_opn_index: tried to interpret an immediate value!"
   | [Reg r] -> (rind r)
   | [Ind1 (Lit i)] -> let addr = map_addr i in begin match addr with 
                       | None -> raise X86lite_segfault
                       | Some i -> i
                       end
-  | [Ind1 (Lbl _)] -> failwith "interp_unary_operand: tried to interpret a label!"
+  | [Ind1 (Lbl _)] -> failwith "interp_unary_opn_index: tried to interpret a label!"
   | [Ind2 r] -> begin match map_addr(m.regs.(rind r)) with 
                 | None -> raise X86lite_segfault
                 | Some i -> i
@@ -242,17 +242,17 @@ let interp_unary_operand (operands : operand list) (m:mach) : int =
                           | None -> raise X86lite_segfault
                           | Some i -> i; 
                           end
-  | _ -> failwith "interp_unary_operand: tried to interpret an invalid operand!"
+  | _ -> failwith "interp_unary_opn_index: tried to interpret an invalid operand!"
   end
 
-let interp_unary_source (operands: operand list) (m: mach) : int64 =
+let interp_unary_opn_int64 (operands: operand list) (m: mach) : int64 =
   begin match operands with
   | [Imm (Lit i)] -> i
-  | [Reg _] -> m.regs.(interp_unary_operand operands m)
+  | [Reg _] -> m.regs.(interp_unary_opn_index operands m)
   | [Ind1 (Lit _)]
   | [Ind2 _]
-  | [Ind3 (Lit _, _)] -> get_int64_from_mem (Some (interp_unary_operand operands m) ) m.mem
-  | _ -> failwith "interp_unary_source: tried to interpret invalid operand!"
+  | [Ind3 (Lit _, _)] -> get_int64_from_mem (Some (interp_unary_opn_index operands m) ) m.mem
+  | _ -> failwith "interp_unary_opn_int64: tried to interpret invalid operand!"
   end
 
 let interp_binary_operand (operands : operand list) (m:mach) : (int64 * int) = 
@@ -367,7 +367,7 @@ let shift_operation (args: operand list) (m:mach) (operation: quad -> int -> qua
 
 (* -------------------------------- Helper: Data Storage -------------------------------- *)
 let popq_into_dst (args: operand list) (m:mach): unit =
-  let d = interp_unary_operand args m in
+  let d = interp_unary_opn_index args m in
   let data = get_int64_from_mem (map_addr m.regs.(rind Rsp)) m.mem in
   begin match args with
   | [Reg _] -> m.regs.(d) <- data
@@ -379,7 +379,7 @@ let popq_into_dst (args: operand list) (m:mach): unit =
   m.regs.(rind Rsp) <- Int64.add m.regs.(rind Rsp) 8L
 
 let push_into_stack (args: operand list) (m:mach): unit =
-  let s = interp_unary_source args m in
+  let s = interp_unary_opn_int64 args m in
   m.regs.(rind Rsp) <- Int64.sub m.regs.(rind Rsp) 8L;
   set_int64_in_mem (map_addr m.regs.(rind Rsp)) m.mem s
   
@@ -402,16 +402,16 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
 
   begin match op with
   | Negq -> 
-    let idx: int = interp_unary_operand args m in
-    let data = begin match args with
-      | [Reg _] -> let d1 = Int64.neg m.regs.(idx) in (m.regs.(idx) <- d1); d1
+    let dst: int = interp_unary_opn_index args m in
+    let r64 = begin match args with
+      | [Reg _] -> let r1 = Int64.neg m.regs.(dst) in (m.regs.(dst) <- r1); r1
       | [Ind1 _]
       | [Ind2 _]
-      | [Ind3 _] -> let d2 = Int64.neg (get_int64_from_mem (Some idx) m.mem) in (set_int64_in_mem (Some idx) m.mem d2); d2
+      | [Ind3 _] -> let r2 = Int64.neg (get_int64_from_mem (Some dst) m.mem) in (set_int64_in_mem (Some dst) m.mem r2); r2
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end in
-    Int64.compare (Int64.min_int) data |> (fun x -> (m.flags.fo <- x = 0));
-    set_SF_and_ZF data m
+    m.flags.fo <- (Int64.equal (Int64.min_int) r64);
+    set_SF_and_ZF r64 m
   | Addq ->
     let (s, d) = interp_binary_operand args m in 
     let (s64, d64, r64) = begin match args with
@@ -429,7 +429,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       (s, temp, r2)
     | _ -> failwith ""
     end in
-    m.flags.fo <- ( (same_sign d64 s64) && not (same_sign r64 s64) );
+    m.flags.fo <- (same_sign d64 s64) && not (same_sign r64 s64);
     set_SF_and_ZF r64 m
   | Subq ->
     let (s, d) = interp_binary_operand args m in
@@ -448,7 +448,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
         (s, temp, r2)
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end in
-    m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
+    m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || (Int64.equal s64 Int64.min_int);
     set_SF_and_ZF r64 m
   | Imulq -> 
     let (s, d) = interp_binary_operand args m in
@@ -460,11 +460,11 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
         (s, temp, r1)
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end in
-    m.flags.fo <- ((Int64.compare s64 0L) <> 0) && ((Int64.div r64 s64) <> d64);
+    m.flags.fo <- (not (Int64.equal s64 0L)) && ((Int64.div r64 s64) <> d64);
     (* flag fz and fs are undefined *)
   | Incq ->
-    let src = interp_unary_operand args m in
-    let s64 = interp_unary_source args m in
+    let src = interp_unary_opn_index args m in
+    let s64 = interp_unary_opn_int64 args m in
     let r64 = Int64.succ s64 in
     begin match args with
     | [Reg _] -> m.regs.(src) <- r64
@@ -476,8 +476,8 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     set_SF_and_ZF r64 m;
     m.flags.fo <- (same_sign 1L s64) && (same_sign (-1L) r64)
   | Decq ->
-    let src = interp_unary_operand args m in
-    let s64 = interp_unary_source args m in
+    let src = interp_unary_opn_index args m in
+    let s64 = interp_unary_opn_int64 args m in
     let r64 = Int64.pred s64 in
     begin match args with
     | [Reg _] -> m.regs.(src) <- r64
@@ -493,8 +493,8 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ----------------------------------- Logic Instructions ----------------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
   | Notq -> 
-    let dst = interp_unary_operand args m in
-    let v = interp_unary_source args m in 
+    let dst = interp_unary_opn_index args m in
+    let v = interp_unary_opn_int64 args m in 
     begin match args with
     | [Reg _] -> m.regs.(dst) <- Int64.lognot v
     | [Ind1 _]
@@ -542,7 +542,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     end
   (* TODO: More test of Set.*)
   | Set c -> 
-    let dst = interp_unary_operand args m in
+    let dst = interp_unary_opn_index args m in
     let data = Int64.of_int (Bool.to_int (interp_cnd m.flags c)) in
     begin match args with
     | [Reg _] -> (m.regs.(dst) <- Int64.add data (Int64.logand clear_lower_byte m.regs.(dst)))
@@ -564,7 +564,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
       | Ind3 (Lit i, r) -> Int64.add m.regs.(rind r) i
       | _ -> failwith "execute: tried to interpret an invalid operand!"
       end in 
-      let d = interp_unary_operand [dst] m in
+      let d = interp_unary_opn_index [dst] m in
       begin match dst with
       | Reg _ -> m.regs.(d) <- s
       | Ind1 _
@@ -605,26 +605,23 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
                       (s, temp, r2)
       | _ -> failwith "execute: tried to interpret an invalid operand!"
     end in
-    m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || ((Int64.compare s64 Int64.min_int) = 0);
+    m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || (Int64.equal s64 Int64.min_int);
     set_SF_and_ZF r64 m
 
   | Jmp -> 
-    let s = interp_unary_source args m in
+    let s = interp_unary_opn_int64 args m in
     m.regs.(rind Rip) <- Int64.sub s 8L
   | Callq ->
     push_into_stack [Reg Rip] m;
-    m.regs.(rind Rip) <- Int64.sub (interp_unary_source args m) 8L
+    m.regs.(rind Rip) <- Int64.sub (interp_unary_opn_int64 args m) 8L
 
   | Retq ->
     popq_into_dst [Reg Rip] m;
     m.regs.(rind Rip) <- Int64.sub m.regs.(rind Rip) 8L
   | J c ->
-    let s = interp_unary_source args m in
+    let s = interp_unary_opn_int64 args m in
     if (interp_cnd m.flags c) then
       m.regs.(rind Rip) <- Int64.sub s 8L
-  
-  
-  | _ -> failwith "more instructions to be implemented"
   end
 
 let step (m:mach) : unit = 
