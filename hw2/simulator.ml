@@ -471,10 +471,23 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     | [Ind1 _]
     | [Ind2 _]
     | [Ind3 _] -> set_int64_in_mem (Some src) m.mem r64
-    | _ -> failwith "execute_incq: tried to interpret an invalid operand"
+    | _ -> failwith "execute_incq: tried to interpret an invalid operand!"
     end;
     set_SF_and_ZF r64 m;
     m.flags.fo <- (same_sign 1L s64) && (same_sign (-1L) r64)
+  | Decq ->
+    let src = interp_unary_operand args m in
+    let s64 = interp_unary_source args m in
+    let r64 = Int64.pred s64 in
+    begin match args with
+    | [Reg _] -> m.regs.(src) <- r64
+    | [Ind1 _]
+    | [Ind2 _]
+    | [Ind3 _] -> set_int64_in_mem (Some src) m.mem r64
+    | _ -> failwith "execute_decq: tried to interpret an invalid operand"
+    end;
+    set_SF_and_ZF r64 m;
+    m.flags.fo <- ((same_sign (-1L) s64) && (same_sign 1L r64)) || (Int64.equal s64 Int64.min_int)
 
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Logic Instructions ----------------------------------------- *)
