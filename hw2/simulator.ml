@@ -445,6 +445,16 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ------------------------------------------------------------------------------------------------ *)
   (* ----------------------------------- Logic Instructions ----------------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
+  | Notq -> 
+    let dst = interp_unary_operand args m in
+    let v = interp_unary_source args m in 
+    begin match args with
+    | [Reg _] -> m.regs.(dst) <- Int64.lognot v
+    | [Ind1 _]
+    | [Ind2 _]
+    | [Ind3 _] -> set_int64_in_mem (Some dst) m.mem (Int64.lognot v)
+    | _ -> failwith "execute_notq: tried to implement an invalid operand"
+    end
   | Andq -> logic_operation args m Int64.logand
   | Orq -> logic_operation args m Int64.logor
   | Xorq -> logic_operation args m Int64.logxor
