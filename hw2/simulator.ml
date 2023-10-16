@@ -778,4 +778,25 @@ let assemble (p:prog) : exec =
   may be of use.
 *)
 let load {entry; text_pos; data_pos; text_seg; data_seg} : mach = 
-failwith "load unimplemented"
+(* failwith "load unimplemented" *)
+  let flags: flags = {fo = false; fs = false; fz = false} in
+  let regs: regs = Array.make nregs 0L in
+  let mem: mem = Array.make mem_size (Byte '\x00') in
+  let text_len = List.length text_seg in
+  let data_len = List.length data_seg in
+  (* print_string "List.length text_seg: ";
+  print_int (List.length text_seg);
+  print_newline();
+  print_string "text_len: ";
+  print_int (text_len);
+  print_newline(); *)
+  (* assert (List.length text_seg < text_len); *)
+  (* assert (List.length text_seg = text_len); *)
+  Array.blit (Array.of_list text_seg) 0 mem 0 text_len; 
+  Array.blit (Array.of_list data_seg) 0 mem text_len data_len;
+  regs.(rind Rip) <- entry;
+  regs.(rind Rsp) <- mem_top;
+  let m = {flags = flags; regs = regs; mem = mem} in
+  push_into_stack [Imm (Lit exit_addr)] m;
+  m
+
