@@ -700,13 +700,50 @@ let add_to_table (d: string -> int64) (k: string) (v: int64) : (string -> int64)
      fun x -> if x = k then v else d x
   else raise (Redefined_sym k)
 
-let resolve_labels (p:prog) : (string -> int64) = 
+let get_table (p:prog) : (string -> int64) = 
   let get_label (prev: (string -> int64) * int64) (e:elem) : (string -> int64) * int64 =
     begin match e.asm with
     | Text i -> (add_to_table (fst prev) e.lbl (snd prev), Int64.add (Int64.of_int ((List.length i) * 8)) (snd prev))
     | Data i -> (add_to_table (fst prev) e.lbl (snd prev), Int64.add (Int64.of_int ((List.length i) * 8)) (snd prev))
     end in 
     fst (List.fold_left get_label (empty, mem_bot) p)
+
+let lookup_with_undefined (tbl: string -> int64) (l: string) : int64 =
+  let a_resolved = (lookup tbl l) in 
+    if Int64.equal a_resolved (-1L) then raise (Undefined_sym l)
+    else a_resolved
+
+let resolve_symbol_single_ins (op, args:ins) (tbl: string -> int64) : ins =
+  let resolve_arg (a: operand) : operand =
+    begin match a with
+    | Imm (Lbl l) -> Imm (Lit (lookup_with_undefined tbl l))
+    | Ind1 (Lbl l) -> Ind1 (Lit (lookup_with_undefined tbl l))
+    | Ind3 (Lbl l, r) -> Ind3 (Lit (lookup_with_undefined tbl l), r)
+    | _ -> a
+    end in
+  (op, List.map resolve_arg args)
+
+let resolve_symbol_single_data (d: data) (tbl: string -> int64) : data =
+  begin match d with
+  | Quad (Lbl l) -> Quad (Lit (lookup_with_undefined tbl l))
+  | _ -> d
+  end
+
+let get_text_segment (text:prog) (tbl: string -> int64) : (sbyte list) = 
+  let get_text_from_elem (seg: sbyte list) (e: elem) : sbyte list =
+    begin match e.asm with
+    | Text i -> seg @ List.fold_left List.append [] (List.map (fun x -> sbytes_of_ins(resolve_symbol_single_ins x tbl)) i)
+    | Data _ -> failwith "get_text_segment: tried to get text segment from data segment!"
+    end in 
+  List.fold_left get_text_from_elem [] text
+
+let get_data_segment (data:prog) (tbl: string -> int64): (sbyte list) =
+  let get_data_from_elem (seg: sbyte list) (e: elem) : sbyte list =
+    begin match e.asm with
+    | Text _ -> failwith "get_data_segment: tried to get data segment from text segment!"
+    | Data i -> seg @ List.fold_left List.append [] (List.map (fun x -> sbytes_of_data(resolve_symbol_single_data x tbl)) i)
+    end in 
+  List.fold_left get_data_from_elem [] data
 
 
 let assemble (p:prog) : exec =
@@ -715,13 +752,17 @@ let assemble (p:prog) : exec =
   let text_size = get_text_size_bytes text in
   let text_pos = mem_bot in
   let data_pos = Int64.add text_pos text_size in
+  let symbol_table = get_table p in
+  let entry = lookup_with_undefined symbol_table "main" in
+  let text_seg = get_text_segment text symbol_table in
+  let data_seg = get_data_segment data symbol_table in
   (* analyze entry, text_seg and data_seg *)
-  {entry = -1L;    (* TODO *)
+  {entry = entry;    (* TODO *)
    text_pos = text_pos;
    data_pos = data_pos;
-   text_seg = [];  (* TODO *)
-   data_seg = []   (* TODO *)
-   }  
+   text_seg = text_seg;  (* TODO *)
+   data_seg = data_seg   (* TODO *)
+   }
 
 (* Convert an object file into an executable machine state. 
     - allocate the mem array
