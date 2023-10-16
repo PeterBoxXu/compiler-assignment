@@ -141,7 +141,7 @@ let sbytes_of_data : data -> sbyte list = function
      [if !debug_simulator then print_endline @@ string_of_ins u; ...]
 
 *)
-let debug_simulator = ref true
+let debug_simulator = ref false
 
 (* Interpret a condition code with respect to the given flags. *)
 let interp_cnd {fo; fs; fz} : cnd -> bool = fun x -> 
@@ -369,9 +369,6 @@ let shift_operation (args: operand list) (m:mach) (operation: quad -> int -> qua
 let popq_into_dst (args: operand list) (m:mach): unit =
   let d = interp_unary_opn_index args m in
   let data = get_int64_from_mem (map_addr m.regs.(rind Rsp)) m.mem in
-  print_newline();
-  print_int (Int64.to_int data);
-  print_newline();
   begin match args with
   | [Reg _] -> m.regs.(d) <- data
   | [Ind1 _] 
@@ -616,7 +613,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     m.regs.(rind Rip) <- Int64.sub s 8L
   | Callq ->
     push_into_stack [Reg Rip] m;
-    m.regs.(rind Rip) <- Int64.sub (interp_unary_opn_int64 args m) 8L
+    m.regs.(rind Rip) <- interp_unary_opn_int64 args m
 
   | Retq ->
     popq_into_dst [Reg Rip] m;
@@ -624,20 +621,20 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   | J c ->
     let s = interp_unary_opn_int64 args m in
     if (interp_cnd m.flags c) then
-      m.regs.(rind Rip) <- Int64.sub s 8L
+      m.regs.(rind Rip) <- s
   end
 
 let step (m:mach) : unit = 
   let rip = m.regs.(rind Rip) in
   let addr = map_addr rip in
   let byte = get_sbyte_from_mem addr m.mem in
-  let _ = begin match byte with
+  begin match byte with
     | [InsB0 (op, args); _; _; _; _; _; _; _] -> 
       if !debug_simulator then print_endline @@ string_of_ins (op, args);
+      m.regs.(rind Rip) <- Int64.add m.regs.(rind Rip) 8L;
       execute op args m;
     | _ -> failwith "step: tried to interpret an invalid instruction!"
-  end in
-  m.regs.(rind Rip) <- Int64.add m.regs.(rind Rip) 8L
+  end
 
 (* Runs the machine until the rip register reaches a designated
    memory address. Returns the contents of %rax when the 
@@ -787,19 +784,11 @@ let load {entry; text_pos; data_pos; text_seg; data_seg} : mach =
   let mem: mem = Array.make mem_size (Byte '\x00') in
   let text_len = List.length text_seg in
   let data_len = List.length data_seg in
-  (* print_string "List.length text_seg: ";
-  print_int (List.length text_seg);
-  print_newline();
-  print_string "text_len: ";
-  print_int (text_len);
-  print_newline(); *)
-  (* assert (List.length text_seg < text_len); *)
-  (* assert (List.length text_seg = text_len); *)
   Array.blit (Array.of_list text_seg) 0 mem 0 text_len; 
   Array.blit (Array.of_list data_seg) 0 mem text_len data_len;
   regs.(rind Rip) <- entry;
   regs.(rind Rsp) <- mem_top;
   let m = {flags = flags; regs = regs; mem = mem} in
-  push_into_stack [Imm (Lit (Int64.sub exit_addr 8L))] m;
+  push_into_stack [Imm (Lit exit_addr)] m;
   m
 
