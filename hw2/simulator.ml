@@ -141,7 +141,7 @@ let sbytes_of_data : data -> sbyte list = function
      [if !debug_simulator then print_endline @@ string_of_ins u; ...]
 
 *)
-let debug_simulator = ref false
+let debug_simulator = ref true
 
 (* Interpret a condition code with respect to the given flags. *)
 let interp_cnd {fo; fs; fz} : cnd -> bool = fun x -> 
@@ -369,6 +369,9 @@ let shift_operation (args: operand list) (m:mach) (operation: quad -> int -> qua
 let popq_into_dst (args: operand list) (m:mach): unit =
   let d = interp_unary_opn_index args m in
   let data = get_int64_from_mem (map_addr m.regs.(rind Rsp)) m.mem in
+  print_newline();
+  print_int (Int64.to_int data);
+  print_newline();
   begin match args with
   | [Reg _] -> m.regs.(d) <- data
   | [Ind1 _] 
@@ -617,7 +620,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
 
   | Retq ->
     popq_into_dst [Reg Rip] m;
-    m.regs.(rind Rip) <- Int64.sub m.regs.(rind Rip) 8L
+    (* Wrong: m.regs.(rind Rip) <- Int64.sub m.regs.(rind Rip) 8L !!*)
   | J c ->
     let s = interp_unary_opn_int64 args m in
     if (interp_cnd m.flags c) then
@@ -797,6 +800,6 @@ let load {entry; text_pos; data_pos; text_seg; data_seg} : mach =
   regs.(rind Rip) <- entry;
   regs.(rind Rsp) <- mem_top;
   let m = {flags = flags; regs = regs; mem = mem} in
-  push_into_stack [Imm (Lit exit_addr)] m;
+  push_into_stack [Imm (Lit (Int64.sub exit_addr 8L))] m;
   m
 
