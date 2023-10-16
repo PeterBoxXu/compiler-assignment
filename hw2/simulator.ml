@@ -689,7 +689,25 @@ let get_text_size_bytes (p:prog) : int64 =
     | _ -> init
     end in
   Int64.mul (List.fold_left get_size 0L p) 8L
-  
+
+let empty (_: string) : int64 = -1L
+
+let lookup (d: string -> int64) (k: string) : int64 =
+  d k
+
+let add_to_table (d: string -> int64) (k: string) (v: int64) : (string -> int64) =
+  if Int64.equal (lookup d k) (-1L) then
+     fun x -> if x = k then v else d x
+  else raise (Redefined_sym k)
+
+let resolve_labels (p:prog) : (string -> int64) = 
+  let get_label (prev: (string -> int64) * int64) (e:elem) : (string -> int64) * int64 =
+    begin match e.asm with
+    | Text i -> (add_to_table (fst prev) e.lbl (snd prev), Int64.add (Int64.of_int ((List.length i) * 8)) (snd prev))
+    | Data i -> (add_to_table (fst prev) e.lbl (snd prev), Int64.add (Int64.of_int ((List.length i) * 8)) (snd prev))
+    end in 
+    fst (List.fold_left get_label (empty, mem_bot) p)
+
 
 let assemble (p:prog) : exec =
   (* failwith "assemble unimplemented" *)
