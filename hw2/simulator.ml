@@ -673,8 +673,37 @@ exception Redefined_sym of lbl
 
   HINT: List.fold_left and List.fold_right are your friends.
  *)
+
+let separate_text_from_data (p:prog) : prog * prog =
+  let is_text_or_data (init: prog * prog) (e:elem) : prog * prog  =
+    begin match e.asm with
+    | Text _ -> (fst init @ [e], snd init)
+    | Data _ -> (fst init, snd init @ [e])
+    end in
+  List.fold_left is_text_or_data ([], []) p
+
+let get_text_size_bytes (p:prog) : int64 =
+  let get_size (init: int64) (e:elem) : int64 =
+    begin match e.asm with
+    | Text i -> Int64.add (Int64.of_int (List.length i)) init
+    | _ -> init
+    end in
+  Int64.mul (List.fold_left get_size 0L p) 8L
+  
+
 let assemble (p:prog) : exec =
-failwith "assemble unimplemented"
+  (* failwith "assemble unimplemented" *)
+  let (text, data) = separate_text_from_data p in
+  let text_size = get_text_size_bytes text in
+  let text_pos = mem_bot in
+  let data_pos = Int64.add text_pos text_size in
+  (* analyze entry, text_seg and data_seg *)
+  {entry = -1L;    (* TODO *)
+   text_pos = text_pos;
+   data_pos = data_pos;
+   text_seg = [];  (* TODO *)
+   data_seg = []   (* TODO *)
+   }  
 
 (* Convert an object file into an executable machine state. 
     - allocate the mem array
