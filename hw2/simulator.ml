@@ -141,7 +141,7 @@ let sbytes_of_data : data -> sbyte list = function
      [if !debug_simulator then print_endline @@ string_of_ins u; ...]
 
 *)
-let debug_simulator = ref false
+let debug_simulator = ref true
 
 (* Interpret a condition code with respect to the given flags. *)
 let interp_cnd {fo; fs; fz} : cnd -> bool = fun x -> 
@@ -610,7 +610,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
 
   | Jmp -> 
     let s = interp_unary_opn_int64 args m in
-    m.regs.(rind Rip) <- Int64.sub s 8L
+    m.regs.(rind Rip) <- s
   | Callq ->
     push_into_stack [Reg Rip] m;
     m.regs.(rind Rip) <- interp_unary_opn_int64 args m
