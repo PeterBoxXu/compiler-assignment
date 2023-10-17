@@ -521,7 +521,8 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     if not (Int64.equal amt 0L) then begin
       set_SF_and_ZF r64 m;
       if (Int64.equal amt 1L) then begin
-        if top_two_diff d64 then 
+        if not (same_sign d64 r64) then 
+        (* if top_two_diff d64 then *)
           m.flags.fo <- true
         else
           m.flags.fo <- false
@@ -577,10 +578,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
 
 
   | Movq ->
-    print_string "hello everyone\n";
     let (s, d) = interp_binary_operand args m in
-    print_int (Int64.to_int s);
-    print_newline();
     begin match args with
       | [_; Ind1 _] 
       | [_; Ind2 _]
