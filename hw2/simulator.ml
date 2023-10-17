@@ -141,7 +141,7 @@ let sbytes_of_data : data -> sbyte list = function
      [if !debug_simulator then print_endline @@ string_of_ins u; ...]
 
 *)
-let debug_simulator = ref true
+let debug_simulator = ref false
 
 (* Interpret a condition code with respect to the given flags. *)
 let interp_cnd {fo; fs; fz} : cnd -> bool = fun x -> 
@@ -593,7 +593,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ----------------------------------- Control-flow and condition --------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
   | Cmpq ->
-    let (s, d) = interp_binary_operand args m in
+    (* let (s, d) = interp_binary_operand args m in
     let (s64, d64, r64) = begin match args with
       | [_; Ind1 _] 
       | [_; Ind2 _]
@@ -604,8 +604,15 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
                       let temp = m.regs.(d) in 
                       (s, temp, r2)
       | _ -> failwith "execute: tried to interpret an invalid operand!"
+    end in *)
+    let (src1, src2, r64) = begin match args with
+    | [s1; s2] ->
+      let tmp1 = interp_unary_opn_int64 [s1] m in
+      let tmp2 = interp_unary_opn_int64 [s2] m in
+      (tmp1, tmp2, Int64.sub tmp2 tmp1)
+    | _ -> failwith "execute_cmpq: invalid operands"
     end in
-    m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || (Int64.equal s64 Int64.min_int);
+    m.flags.fo <- ( (same_sign src2 (Int64.neg src1)) && not (same_sign r64 (Int64.neg src1)) ) || (Int64.equal src1 Int64.min_int);
     set_SF_and_ZF r64 m
 
   | Jmp -> 

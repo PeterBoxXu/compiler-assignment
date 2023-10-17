@@ -170,20 +170,19 @@ let charcobb_tests =
   ] in
 
   [   (* GCD of two positive integers. *)
-      (* ("gcd 10 20", program_test (gcd 10 20) 10L);
+      ("gcd 10 20", program_test (gcd 10 20) 10L);
       ("gcd 20 20", program_test (gcd 20 20) 20L);
       ("gcd 18 12", program_test (gcd 18 12) 6L);
-      ("gcd 23 19", program_test (gcd 23 19) 1L); *)
+      ("gcd 23 19", program_test (gcd 23 19) 1L);
       (* Floor of the logarithm (base 2) of a positive integer. *)
-      (* ("log 1", program_test (log 1L) (0L)); *)
+      ("log 1", program_test (log 1L) (0L));
       ("log 2", program_test (log 2L) (1L));
-      (*
       ("log 3", program_test (log 3L) (1L));
       ("log 17", program_test (log 17L) (4L));
       ("log 23", program_test (log 23L) (4L));
       ("log 24", program_test (log 24L) (4L));
       ("log 31", program_test (log 31L) (4L));
-      ("log 2^63-1", program_test (log 0x7fffffffffffffffL) (62L)); *)
+      ("log 2^63-1", program_test (log 0x7fffffffffffffffL) (62L));
   ]
 
 let chinz_tests =
@@ -1444,21 +1443,21 @@ let wmcd_tests =
   ]
 
 let tests = ellisl_tests
-          (* @ cbarcen_tests *)
-          (* @ asgoel_tests *)
+          @ cbarcen_tests
+          @ asgoel_tests
           (* @ chinz_tests *) (* Undefined behavior *)
-          (* @ dmally_tests
+          @ dmally_tests
           @ charcobb_tests
           @ honki_tests
           @ isibner_tests
           @ jampa_tests
-          @ kainino_tests *)
+          @ kainino_tests
           (* @ lpena_tests *) (* Undefined beahavior *)
           (* @ maxmcc_tests *) (* Undefined behavior *)
-          (* @ nchodosh_tests
+          @ nchodosh_tests
           @ palimar_tests
           @ samrossi_tests
           @ tgarsys_tests
-          @ wmcd_tests *)
+          @ wmcd_tests
 
 let other_team_tests = GradedTest("OtherTeamTests (Spring 2015) (manual)!!!!!!!!!!!!", 5, tests)
