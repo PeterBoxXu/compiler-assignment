@@ -929,3 +929,6 @@ let tests = aen_tests
           (* @ tlarkwor_tests *) (* No test provided *)
           @ wangandr_tests
           @ wsun_tests
+
+let other_team_tests = GradedTest("OtherTeamTests (Spring 2018) (manual)", 10, tests)
+

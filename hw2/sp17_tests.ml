@@ -782,12 +782,15 @@ let hunterl_tests =
     ]
   in
 
-  [ ("empty list", selection_test [] 0 0L);
+  [ 
+    ("empty list", selection_test [] 0 0L);
     ("easy1", selection_test [1L;2L;3L] 1 2L);
     ("easy2", selection_test [1L;2L;3L] 0 1L);
 
-    ("unsorted1", selection_test [4L;3L;1L;2L] 0 1L);
     ("unsorted2", selection_test [4L;3L;1L;2L] 2 3L);
+
+
+    ("unsorted1", selection_test [4L;3L;1L;2L] 0 1L);
     ("unsorted3", selection_test [4L;3L;1L;2L] 3 4L);
 
     ("large unsorted1", selection_test large_list 0 1L);
@@ -1403,21 +1406,21 @@ let wuwc_tests =
     ("Repeated   ", bubblesort_test [6L; 21L; 6L; 573L; 21L; 3L])
   ]
 
-let tests = alexpe_tests
+let tests = hunterl_tests 
           @ apoth_tests
           @ burowski_tests
-          (* @ chmart_tests *)
+          (* @ chmart_tests *) (*do not open*)
           @ clancyt_tests
           @ davidcao_tests
           @ eneyman_tests
           @ hand_tests
           @ hta_tests
-          @ hunterl_tests
+          @ alexpe_tests
           @ jaust_tests
           @ keweiqu_tests
-          (* @ kyim_tests *)
+          (* @ kyim_tests *) (*do not open*)
           @ maale_tests
-          (* @ minski_tests *)
+          (* @ minski_tests *) (*do not open*)
           @ olekg_tests
           @ rzajac_tests
           @ wuwc_tests

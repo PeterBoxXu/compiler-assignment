@@ -577,7 +577,10 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
 
 
   | Movq ->
+    print_string "hello everyone\n";
     let (s, d) = interp_binary_operand args m in
+    print_int (Int64.to_int s);
+    print_newline();
     begin match args with
       | [_; Ind1 _] 
       | [_; Ind2 _]
@@ -707,13 +710,13 @@ let add_to_table (d: string -> int64) (k: string) (v: int64) : (string -> int64)
      fun x -> if x = k then v else d x
   else raise (Redefined_sym k)
 
-let get_table (p:prog) : (string -> int64) = 
+let get_table (p:prog) (init: int64) (d: string -> int64) : (string -> int64) = 
   let get_label (prev: (string -> int64) * int64) (e:elem) : (string -> int64) * int64 =
     begin match e.asm with
     | Text i -> (add_to_table (fst prev) e.lbl (snd prev), Int64.add (Int64.of_int ((List.length i) * 8)) (snd prev))
     | Data i -> (add_to_table (fst prev) e.lbl (snd prev), Int64.add (Int64.of_int ((List.length i) * 8)) (snd prev))
     end in 
-    fst (List.fold_left get_label (empty, mem_bot) p)
+    fst (List.fold_left get_label (d, init) p)
 
 let lookup_with_undefined (tbl: string -> int64) (l: string) : int64 =
   let a_resolved = (lookup tbl l) in 
@@ -759,7 +762,8 @@ let assemble (p:prog) : exec =
   let text_size = get_text_size_bytes text in
   let text_pos = mem_bot in
   let data_pos = Int64.add text_pos text_size in
-  let symbol_table = get_table p in
+  let text_table = get_table text text_pos empty in
+  let symbol_table = get_table data data_pos text_table in
   let entry = lookup_with_undefined symbol_table "main" in
   let text_seg = get_text_segment text symbol_table in
   let data_seg = get_data_segment data symbol_table in

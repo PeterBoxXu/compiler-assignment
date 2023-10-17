@@ -1,7 +1,7 @@
 DIRS := util,grading,x86
 LIBS := unix,str
 SUBMIT := simulator.ml team.txt
-OTHER := gradedtests.ml studenttests.ml main.ml sp15_tests.ml
+OTHER := gradedtests.ml studenttests.ml main.ml sp15_tests.ml sp17_tests.ml sp18_tests.ml sp20_tests.ml
 HWNAME := hw02
 ZIPNAME := $(HWNAME)-submit.zip
 
