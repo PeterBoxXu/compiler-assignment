@@ -204,8 +204,7 @@ let set_in_byte (addr:int option) (mm:mem) (value: int64) : unit =
 
 (* -------------------------------- Helper: Sign Computation -------------------------------- *)
 let sign_bit (a: int64) : bool =
-  if ((Int64.compare a 0L) < 0) then true 
-  else false
+  (Int64.compare a 0L) < 0
 
 let same_sign (a: int64) (b: int64) : bool =
   if (sign_bit a) = (sign_bit b) then true
@@ -358,7 +357,7 @@ let shift_operation (args: operand list) (m:mach) (operation: quad -> int -> qua
   | [Imm _; Reg _] 
   | [Reg Rcx; Reg _]-> 
     let r1 = operation (m.regs.(d)) (Int64.to_int amt) in
-    let temp = (get_int64_from_mem (Some d) m.mem) in
+    let temp = m.regs.(d) in
     m.regs.(d) <- r1;
     (temp, r1)
   | _ -> failwith ""
