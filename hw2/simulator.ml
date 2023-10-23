@@ -204,8 +204,7 @@ let set_in_byte (addr:int option) (mm:mem) (value: int64) : unit =
 
 (* -------------------------------- Helper: Sign Computation -------------------------------- *)
 let sign_bit (a: int64) : bool =
-  if ((Int64.compare a 0L) < 0) then true 
-  else false
+  (Int64.compare a 0L) < 0
 
 let same_sign (a: int64) (b: int64) : bool =
   if (sign_bit a) = (sign_bit b) then true
@@ -358,7 +357,7 @@ let shift_operation (args: operand list) (m:mach) (operation: quad -> int -> qua
   | [Imm _; Reg _] 
   | [Reg Rcx; Reg _]-> 
     let r1 = operation (m.regs.(d)) (Int64.to_int amt) in
-    let temp = (get_int64_from_mem (Some d) m.mem) in
+    let temp = m.regs.(d) in
     m.regs.(d) <- r1;
     (temp, r1)
   | _ -> failwith ""
@@ -521,7 +520,8 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
     if not (Int64.equal amt 0L) then begin
       set_SF_and_ZF r64 m;
       if (Int64.equal amt 1L) then begin
-        if top_two_diff d64 then 
+        if not (same_sign d64 r64) then 
+        (* if top_two_diff d64 then *)
           m.flags.fo <- true
         else
           m.flags.fo <- false
@@ -593,7 +593,7 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
   (* ----------------------------------- Control-flow and condition --------------------------------- *)
   (* ------------------------------------------------------------------------------------------------ *)
   | Cmpq ->
-    let (s, d) = interp_binary_operand args m in
+    (* let (s, d) = interp_binary_operand args m in
     let (s64, d64, r64) = begin match args with
       | [_; Ind1 _] 
       | [_; Ind2 _]
@@ -604,13 +604,20 @@ let execute (op: opcode) (args: operand list) (m:mach) : unit =
                       let temp = m.regs.(d) in 
                       (s, temp, r2)
       | _ -> failwith "execute: tried to interpret an invalid operand!"
+    end in *)
+    let (src1, src2, r64) = begin match args with
+    | [s1; s2] ->
+      let tmp1 = interp_unary_opn_int64 [s1] m in
+      let tmp2 = interp_unary_opn_int64 [s2] m in
+      (tmp1, tmp2, Int64.sub tmp2 tmp1)
+    | _ -> failwith "execute_cmpq: invalid operands"
     end in
-    m.flags.fo <- ( (same_sign d64 (Int64.neg s64)) && not (same_sign r64 (Int64.neg s64)) ) || (Int64.equal s64 Int64.min_int);
+    m.flags.fo <- ( (same_sign src2 (Int64.neg src1)) && not (same_sign r64 (Int64.neg src1)) ) || (Int64.equal src1 Int64.min_int);
     set_SF_and_ZF r64 m
 
   | Jmp -> 
     let s = interp_unary_opn_int64 args m in
-    m.regs.(rind Rip) <- Int64.sub s 8L
+    m.regs.(rind Rip) <- s
   | Callq ->
     push_into_stack [Reg Rip] m;
     m.regs.(rind Rip) <- interp_unary_opn_int64 args m
@@ -700,13 +707,13 @@ let add_to_table (d: string -> int64) (k: string) (v: int64) : (string -> int64)
      fun x -> if x = k then v else d x
   else raise (Redefined_sym k)
 
-let get_table (p:prog) : (string -> int64) = 
+let get_table (p:prog) (init: int64) (d: string -> int64) : (string -> int64) = 
   let get_label (prev: (string -> int64) * int64) (e:elem) : (string -> int64) * int64 =
     begin match e.asm with
     | Text i -> (add_to_table (fst prev) e.lbl (snd prev), Int64.add (Int64.of_int ((List.length i) * 8)) (snd prev))
     | Data i -> (add_to_table (fst prev) e.lbl (snd prev), Int64.add (Int64.of_int ((List.length i) * 8)) (snd prev))
     end in 
-    fst (List.fold_left get_label (empty, mem_bot) p)
+    fst (List.fold_left get_label (d, init) p)
 
 let lookup_with_undefined (tbl: string -> int64) (l: string) : int64 =
   let a_resolved = (lookup tbl l) in 
@@ -752,7 +759,8 @@ let assemble (p:prog) : exec =
   let text_size = get_text_size_bytes text in
   let text_pos = mem_bot in
   let data_pos = Int64.add text_pos text_size in
-  let symbol_table = get_table p in
+  let text_table = get_table text text_pos empty in
+  let symbol_table = get_table data data_pos text_table in
   let entry = lookup_with_undefined symbol_table "main" in
   let text_seg = get_text_segment text symbol_table in
   let data_seg = get_data_segment data symbol_table in
