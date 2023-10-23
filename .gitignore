@@ -2,3 +2,4 @@
 .devcontainer
 _build
 main.native
+*.txt
