@@ -91,7 +91,13 @@ let lookup m x = List.assoc x m
    destination (usually a register).
 *)
 let compile_operand (ctxt:ctxt) (dest:X86.operand) : Ll.operand -> ins =
-  function _ -> failwith "compile_operand unimplemented"
+  fun oprd -> 
+    begin match oprd with
+    | Null -> (Movq, [~$0; dest])
+    | Const i -> (Movq, [Imm(Lit i); dest])
+    | Gid lbl -> (Leaq, [Ind3(Lbl lbl, Rip); dest])
+    | Id lbl -> (Movq, [lookup ctxt.layout lbl; dest]) 
+    end
 
 
 
@@ -233,6 +239,7 @@ let compile_terminator (fn:string) (ctxt:ctxt) (t:Ll.terminator) : ins list =
       Retq, [];
     ]
   | _ -> failwith "only implemented return void!" 
+  end
 
 
 (* compiling blocks --------------------------------------------------------- *)
@@ -283,7 +290,7 @@ let arg_loc (n : int) : operand =
 *)
 let stack_layout (args : uid list) ((block, lbled_blocks):cfg) : layout =
 (* TODO: Only implemented args now, blocks are left. *)
-  let put_arg = fun (idx:int) (label:lbl) -> (label, Ind3(~$((-8)*(idx + 1)), Rbp)) in
+  let put_arg = fun (idx:int) (label:lbl) -> (label, Ind3(Lit (Int64.of_int ((-8)*(idx + 1)) ), Rbp)) in
   List.mapi put_arg args
 
 
@@ -304,7 +311,7 @@ let stack_layout (args : uid list) ((block, lbled_blocks):cfg) : layout =
      to hold all of the local stack slots.
 *)
 
-let find_func_term = failwith "find_func_term not implemented"
+(* let find_func_term = failwith "find_func_term not implemented" *)
 
 let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg }:fdecl) : prog =
 (* Only empty body now. TODO. *)
