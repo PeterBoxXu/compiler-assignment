@@ -272,7 +272,9 @@ let arg_loc (n : int) : operand =
 
 *)
 let stack_layout (args : uid list) ((block, lbled_blocks):cfg) : layout =
-failwith "stack_layout not implemented"
+(* TODO: Only implemented args now, blocks are left. *)
+  let put_arg = fun (idx:int) (label:lbl) -> (label, Ind3(Lit (Int64.of_int ((-8)*(idx + 1))), Rbp)) in
+  List.mapi put_arg args
 
 
 (* The code for the entry-point of a function must do several things:
@@ -292,8 +294,14 @@ failwith "stack_layout not implemented"
      to hold all of the local stack slots.
 *)
 let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg }:fdecl) : prog =
-failwith "compile_fdecl unimplemented"
-
+(* Only empty body now. TODO. *)
+  let exec_frame = stack_layout f_param f_cfg in
+  let arg_locs = List.mapi (fun idx _ -> arg_loc idx) f_param in
+  let movq_pair_oprd (s: X86.operand) (d: (lbl * X86.operand)) : (X86.ins) = 
+    X86.Movq, [s; snd(d)] in 
+  let movq_args = List.map2 movq_pair_oprd arg_locs exec_frame in
+  [Asm.text name movq_args]
+  
 
 
 (* compile_gdecl ------------------------------------------------------------ *)
