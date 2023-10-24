@@ -301,11 +301,9 @@ let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg
   let movq_pair_oprd (s: X86.operand) (d: (lbl * X86.operand)) : (X86.ins) = 
     X86.Movq, [s; snd(d)] in 
   let movq_args = List.map2 movq_pair_oprd arg_locs exec_frame in
-  let rsp_offset = List.length exec_frame in
+  let rsp_offset = 8 * List.length (exec_frame) in
   let prefix = [Pushq, [~%Rbp]; Movq, [~%Rsp; ~%Rbp]; Subq, [~$rsp_offset; ~%Rsp]] in
   [Asm.text name (prefix @ movq_args)]
-  
-
 
 (* compile_gdecl ------------------------------------------------------------ *)
 (* Compile a global value into an X86 global data declaration and map
