@@ -223,7 +223,16 @@ let mk_lbl (fn:string) (l:string) = fn ^ "." ^ l
    [fn] - the name of the function containing this terminator
 *)
 let compile_terminator (fn:string) (ctxt:ctxt) (t:Ll.terminator) : ins list =
-  failwith "compile_terminator not implemented"
+  begin match t with
+  | Ret (Void, None) -> 
+    let rsp_offset = 8 * (List.length ctxt.layout) in
+    [
+      Movq, [~$0; ~%Rax];
+      Addq, [~$rsp_offset; ~%Rsp];
+      Popq, [~%Rbp];
+      Retq, [];
+    ]
+  | _ -> failwith "only implemented return void!" 
 
 
 (* compiling blocks --------------------------------------------------------- *)
@@ -274,7 +283,7 @@ let arg_loc (n : int) : operand =
 *)
 let stack_layout (args : uid list) ((block, lbled_blocks):cfg) : layout =
 (* TODO: Only implemented args now, blocks are left. *)
-  let put_arg = fun (idx:int) (label:lbl) -> (label, Ind3(Lit (Int64.of_int ((-8)*(idx + 1))), Rbp)) in
+  let put_arg = fun (idx:int) (label:lbl) -> (label, Ind3(~$((-8)*(idx + 1)), Rbp)) in
   List.mapi put_arg args
 
 
@@ -294,16 +303,21 @@ let stack_layout (args : uid list) ((block, lbled_blocks):cfg) : layout =
    - the function entry code should allocate the stack storage needed
      to hold all of the local stack slots.
 *)
+
+let find_func_term = failwith "find_func_term not implemented"
+
 let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg }:fdecl) : prog =
 (* Only empty body now. TODO. *)
-  let exec_frame = stack_layout f_param f_cfg in
+  let layout = stack_layout f_param f_cfg in
   let arg_locs = List.mapi (fun idx _ -> arg_loc idx) f_param in
   let movq_pair_oprd (s: X86.operand) (d: (lbl * X86.operand)) : (X86.ins) = 
     X86.Movq, [s; snd(d)] in 
-  let movq_args = List.map2 movq_pair_oprd arg_locs exec_frame in
-  let rsp_offset = 8 * List.length (exec_frame) in
+  let movq_args = List.map2 movq_pair_oprd arg_locs layout in
+  let rsp_offset = 8 * List.length (layout) in
   let prefix = [Pushq, [~%Rbp]; Movq, [~%Rsp; ~%Rbp]; Subq, [~$rsp_offset; ~%Rsp]] in
-  [Asm.text name (prefix @ movq_args)]
+  let ctxt = {tdecls = tdecls; layout = layout} in
+  let suffix = compile_terminator name ctxt (Ret (Void, None)) in  (* TODO: hard-coded terminator case *)
+  [Asm.text name (prefix @ movq_args @ suffix)]
 
 (* compile_gdecl ------------------------------------------------------------ *)
 (* Compile a global value into an X86 global data declaration and map
