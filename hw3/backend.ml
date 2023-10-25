@@ -206,8 +206,9 @@ failwith "compile_gep not implemented"
    - Bitcast: does nothing interesting at the assembly level
 *)
 let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
+  let lookup_layout_uid = lookup ctxt.layout uid in
   begin match i with
-  | Binop (bop, ty, op1, op2) -> 
+  | Binop (bop, _, op1, op2) -> 
     let binop_ll_to_x86 (bop: Ll.bop) : X86.opcode = 
       begin match bop with
       | Add -> Addq
@@ -221,12 +222,25 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
       | Xor -> Xorq 
     end
     in
-    let result_layout_entry = lookup ctxt.layout uid in
     (* ctxt.layout <- (uid, result_layout_entry) :: ctxt.layout; *)
     [compile_operand ctxt (~%Rdi) op1;
     compile_operand ctxt (~%Rsi) op2;
     (binop_ll_to_x86 bop), [~%Rdi; ~%Rsi];
-    Movq, [~%Rsi; result_layout_entry]]
+    Movq, [~%Rsi; lookup_layout_uid]]
+  
+  | Icmp (cnd, _, op1, op2) -> 
+    [compile_operand ctxt (~%Rdi) op1;
+    compile_operand ctxt (~%Rsi) op2;
+    Cmpq, [~%Rdi; ~%Rsi];
+    Set (compile_cnd cnd) [lookup_layout_uid]]
+
+  | Alloca _ ->
+    [Subq, [~$8; ~%Rsp];
+    Movq, [~%Rsp; lookup_layout_uid]]
+
+  (* | Load () *)
+
+
   | _ -> failwith "compile_insn not implemented"
   end
 
@@ -251,8 +265,7 @@ let mk_lbl (fn:string) (l:string) = fn ^ "." ^ l
    [fn] - the name of the function containing this terminator
 *)
 let compile_terminator (fn:string) (ctxt:ctxt) (t:Ll.terminator) : ins list =
-  let rsp_offset = 8 * (List.length ctxt.layout) in
-  let restore_stack = [Addq, [~$rsp_offset; ~%Rsp]; Popq, [~%Rbp]; Retq, [];] in
+  let restore_stack = [Movq, [~%Rbp; ~%Rsp]; Popq, [~%Rbp]; Retq, [];] in
   begin match t with
   | Ret (Void, None) 
   | Ret (_, Some Null) -> 
