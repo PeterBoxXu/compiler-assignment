@@ -251,16 +251,16 @@ let mk_lbl (fn:string) (l:string) = fn ^ "." ^ l
    [fn] - the name of the function containing this terminator
 *)
 let compile_terminator (fn:string) (ctxt:ctxt) (t:Ll.terminator) : ins list =
+  let rsp_offset = 8 * (List.length ctxt.layout) in
+  let restore_stack = [Addq, [~$rsp_offset; ~%Rsp]; Popq, [~%Rbp];
+  Retq, [];] in
   begin match t with
   | Ret (Void, None) -> 
-    let rsp_offset = 8 * (List.length ctxt.layout) in
-    [
-      Movq, [~$0; ~%Rax];
-      Addq, [~$rsp_offset; ~%Rsp];
-      Popq, [~%Rbp];
-      Retq, [];
-      
-    ]
+    [Movq, [~$0; ~%Rax]] @ restore_stack
+  | Ret (_, Some Const c) ->
+    [Movq, [Imm(Lit c); ~%Rax]] @ restore_stack
+  | Ret (_, Some Id uid) ->
+    [Movq, [lookup ctxt.layout uid; ~%Rax]] @ restore_stack
   | _ -> failwith "only implemented return void!" 
   end
 
