@@ -226,7 +226,7 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     [compile_operand ctxt (~%Rdi) op1;
     compile_operand ctxt (~%Rsi) op2;
     (binop_ll_to_x86 bop), [~%Rdi; ~%Rsi];
-    Pushq, [result_layout_entry]]
+    Movq, [~%Rsi; result_layout_entry]]
   | _ -> failwith "compile_insn not implemented"
   end
 
@@ -361,10 +361,10 @@ let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg
   let rsp_offset = 8 * List.length (layout) in
   let prefix = [Pushq, [~%Rbp]; Movq, [~%Rsp; ~%Rbp]; Subq, [~$rsp_offset; ~%Rsp]] in
   let ctxt = {tdecls = tdecls; layout = layout} in
-  let entry_elem = Asm.text name (prefix @ compile_block name ctxt (fst f_cfg)) in 
+  let entry_ins = compile_block name ctxt (fst f_cfg) in 
   let labelled_elems = List.map (fun (lbl, blk) -> compile_lbl_block name lbl ctxt blk) (snd f_cfg)  in
   (* let suffix = compile_terminator name ctxt (Ret (Void, None)) in  TODO: hard-coded terminator case *)
-  [Asm.text name (prefix @ movq_args)] @ [entry_elem] @ labelled_elems
+  Asm.text name (prefix @ movq_args @ entry_ins) :: labelled_elems
 
 (* compile_gdecl ------------------------------------------------------------ *)
 (* Compile a global value into an X86 global data declaration and map
