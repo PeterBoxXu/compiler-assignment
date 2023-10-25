@@ -206,7 +206,27 @@ failwith "compile_gep not implemented"
    - Bitcast: does nothing interesting at the assembly level
 *)
 let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
-      failwith "compile_insn not implemented"
+  begin match i with
+  | Binop (bop, ty, op1, op2) -> 
+    let binop_ll_to_x86 (bop: Ll.bop) : X86.opcode = 
+      begin match bop with
+      | Add -> Addq
+      | Sub -> Subq
+      | Mul -> Imulq
+      | Shl -> Shlq
+      | Lshr -> Shrq
+      | Ashr -> Sarq
+      | And -> Andq
+      | Or -> Orq
+      | Xor -> Xorq 
+    end
+    in
+    [compile_operand ctxt (~%Rdi) op1;
+    compile_operand ctxt (~%Rsi) op2;
+    (binop_ll_to_x86 bop), [~%Rdi; ~%Rsi];
+    Pushq, [~%Rsi]]
+  | _ -> failwith "compile_insn not implemented"
+  end
 
 
 
@@ -237,6 +257,7 @@ let compile_terminator (fn:string) (ctxt:ctxt) (t:Ll.terminator) : ins list =
       Addq, [~$rsp_offset; ~%Rsp];
       Popq, [~%Rbp];
       Retq, [];
+      
     ]
   | _ -> failwith "only implemented return void!" 
   end
