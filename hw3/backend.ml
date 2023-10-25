@@ -252,15 +252,28 @@ let mk_lbl (fn:string) (l:string) = fn ^ "." ^ l
 *)
 let compile_terminator (fn:string) (ctxt:ctxt) (t:Ll.terminator) : ins list =
   let rsp_offset = 8 * (List.length ctxt.layout) in
-  let restore_stack = [Addq, [~$rsp_offset; ~%Rsp]; Popq, [~%Rbp];
-  Retq, [];] in
+  let restore_stack = [Addq, [~$rsp_offset; ~%Rsp]; Popq, [~%Rbp]; Retq, [];] in
   begin match t with
-  | Ret (Void, None) -> 
+  | Ret (Void, None) 
+  | Ret (_, Some Null) -> 
     [Movq, [~$0; ~%Rax]] @ restore_stack
   | Ret (_, Some Const c) ->
     [Movq, [Imm(Lit c); ~%Rax]] @ restore_stack
   | Ret (_, Some Id uid) ->
     [Movq, [lookup ctxt.layout uid; ~%Rax]] @ restore_stack
+  | Br lbl -> [Jmp, [Imm (Lbl (mk_lbl fn lbl))]]
+  | Cbr (Id op, lbl1, lbl2) ->
+    [Movq, [lookup ctxt.layout op; ~%Rax];
+    Cmpq, [~$0; ~%Rax];
+    J X86.Eq, [Imm (Lbl (mk_lbl fn lbl2))];
+    Jmp, [Imm (Lbl (mk_lbl fn lbl1))]
+    ]
+  | Cbr (Const c, lbl1, lbl2) ->
+    [Movq, [Imm (Lit c); ~%Rax];
+    Cmpq, [~$0; ~%Rax];
+    J X86.Eq, [Imm (Lbl (mk_lbl fn lbl2))];
+    Jmp, [Imm (Lbl (mk_lbl fn lbl1))]
+    ]
   | _ -> failwith "only implemented return void!" 
   end
 
