@@ -95,7 +95,7 @@ let compile_operand (ctxt:ctxt) (dest:X86.operand) : Ll.operand -> ins =
     begin match oprd with
     | Null -> (Movq, [~$0; dest])
     | Const i -> (Movq, [Imm(Lit i); dest])
-    | Gid lbl -> (Leaq, [Ind3(Lbl lbl, Rip); dest])
+    | Gid lbl -> (Leaq, [Ind3(Lbl (Platform.mangle lbl), Rip); dest])
     | Id lbl -> (Movq, [lookup ctxt.layout lbl; dest]) 
     end
 
@@ -238,9 +238,19 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     [Subq, [~$8; ~%Rsp];
     Movq, [~%Rsp; lookup_layout_uid]]
 
-  (* | Load () *)
-
-
+  | Load (t, op) -> 
+    begin match op with
+    | Id _  
+    | Gid _ ->
+      [compile_operand ctxt (~%Rdi) op;
+      Movq, [Ind2(~%Rdi); lookup_layout_uid]]
+    | _ -> failwith "load op cannot be a constant or null"
+    end
+  | Store (t, op1, op2) -> 
+    [compile_operand ctxt (~%Rdi) op1;
+    compile_operand ctxt (~%Rsi) op2;
+    Movq, [~%Rdi; Ind2(~%Rsi)]]
+    (* No type checking here ! Weird! *)
   | _ -> failwith "compile_insn not implemented"
   end
 
