@@ -221,10 +221,12 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
       | Xor -> Xorq 
     end
     in
+    let result_layout_entry = lookup ctxt.layout uid in
+    (* ctxt.layout <- (uid, result_layout_entry) :: ctxt.layout; *)
     [compile_operand ctxt (~%Rdi) op1;
     compile_operand ctxt (~%Rsi) op2;
     (binop_ll_to_x86 bop), [~%Rdi; ~%Rsi];
-    Pushq, [~%Rsi]]
+    Pushq, [result_layout_entry]]
   | _ -> failwith "compile_insn not implemented"
   end
 
@@ -311,8 +313,22 @@ let arg_loc (n : int) : operand =
 *)
 let stack_layout (args : uid list) ((block, lbled_blocks):cfg) : layout =
 (* TODO: Only implemented args now, blocks are left. *)
-  let put_arg = fun (idx:int) (label:lbl) -> (label, Ind3(Lit (Int64.of_int ((-8)*(idx + 1)) ), Rbp)) in
-  List.mapi put_arg args
+  let put_arg = fun (idx:int) (label:lbl) : (uid * operand) -> (label, Ind3(Lit (Int64.of_int ((-8)*(idx + 1)) ), Rbp)) in
+  let args_layout = List.mapi put_arg args in
+  let put_uid (l: (uid * operand) list) (i: uid * insn) : (uid * operand) list = 
+    begin match (snd i) with
+    | Call (Void, _, _)
+    | Store _ -> l
+
+    | _ -> (fst i, Ind3(Lit (Int64.of_int ((-8)*(List.length l + 1)) ), Rbp)) :: l
+    end
+  in 
+  let entry_layout = List.fold_left put_uid args_layout block.insns in
+  let exit_layout = List.fold_left put_uid entry_layout (List.flatten 
+  (List.map (fun (x:block) : (uid * insn) list -> x.insns)  
+  (List.map snd lbled_blocks))) in
+  exit_layout
+
 
 
 (* The code for the entry-point of a function must do several things:
