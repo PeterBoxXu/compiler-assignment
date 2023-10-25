@@ -273,9 +273,9 @@ let compile_terminator (fn:string) (ctxt:ctxt) (t:Ll.terminator) : ins list =
    [blk]  - LLVM IR code for the block
 *)
 let compile_block (fn:string) (ctxt:ctxt) (blk:Ll.block) : ins list =
-  failwith "compile_block not implemented"
+  List.flatten (List.map (compile_insn ctxt) blk.insns) @ compile_terminator fn ctxt (snd blk.term)
 
-let compile_lbl_block fn lbl ctxt blk : elem =
+let compile_lbl_block (fn:string) (lbl:string) (ctxt:ctxt) (blk:Ll.block) : elem =
   Asm.text (mk_lbl fn lbl) (compile_block fn ctxt blk)
 
 
@@ -361,8 +361,10 @@ let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg
   let rsp_offset = 8 * List.length (layout) in
   let prefix = [Pushq, [~%Rbp]; Movq, [~%Rsp; ~%Rbp]; Subq, [~$rsp_offset; ~%Rsp]] in
   let ctxt = {tdecls = tdecls; layout = layout} in
-  let suffix = compile_terminator name ctxt (Ret (Void, None)) in  (* TODO: hard-coded terminator case *)
-  [Asm.text name (prefix @ movq_args @ suffix)]
+  let entry_elem = Asm.text name (prefix @ compile_block name ctxt (fst f_cfg)) in 
+  let labelled_elems = List.map (fun (lbl, blk) -> compile_lbl_block name lbl ctxt blk) (snd f_cfg)  in
+  (* let suffix = compile_terminator name ctxt (Ret (Void, None)) in  TODO: hard-coded terminator case *)
+  [Asm.text name (prefix @ movq_args)] @ [entry_elem] @ labelled_elems
 
 (* compile_gdecl ------------------------------------------------------------ *)
 (* Compile a global value into an X86 global data declaration and map
