@@ -354,9 +354,10 @@ let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg
 (* Only empty body now. TODO. *)
   let layout = stack_layout f_param f_cfg in
   let arg_locs = List.mapi (fun idx _ -> arg_loc idx) f_param in
-  let movq_pair_oprd (s: X86.operand) (d: (lbl * X86.operand)) : (X86.ins) = 
-    X86.Movq, [s; snd(d)] in 
-  let movq_args = List.map2 movq_pair_oprd arg_locs layout in
+  let arg_layout = List.map (lookup layout) f_param in
+  let movq_pair_oprd (s: X86.operand) (d: X86.operand) : (X86.ins) = 
+    X86.Movq, [s; d] in 
+  let movq_args = List.map2 movq_pair_oprd arg_locs arg_layout in
   let rsp_offset = 8 * List.length (layout) in
   let prefix = [Pushq, [~%Rbp]; Movq, [~%Rsp; ~%Rbp]; Subq, [~$rsp_offset; ~%Rsp]] in
   let ctxt = {tdecls = tdecls; layout = layout} in
