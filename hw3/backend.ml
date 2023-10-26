@@ -243,7 +243,8 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     | Id _  
     | Gid _ ->
       [compile_operand ctxt (~%Rdi) op;
-      Movq, [Ind2(Rdi); lookup_layout_uid]]
+      Movq, [Ind2(Rdi); ~%Rsi];
+      Movq, [~%Rsi; lookup_layout_uid]]
     | _ -> failwith "load op cannot be a constant or null"
     end
   | Store (t, op1, op2) -> 
@@ -397,10 +398,11 @@ let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg
   let rsp_offset = 8 * List.length (layout) in
   let prefix = [Pushq, [~%Rbp]; Movq, [~%Rsp; ~%Rbp]; Subq, [~$rsp_offset; ~%Rsp]] in
   let ctxt = {tdecls = tdecls; layout = layout} in
-  let entry_ins = compile_block name ctxt (fst f_cfg) in 
+  let entry_ins = compile_block (Platform.mangle name) ctxt (fst f_cfg) in 
   let labelled_elems = List.map (fun (lbl, blk) -> compile_lbl_block name lbl ctxt blk) (snd f_cfg)  in
   (* let suffix = compile_terminator name ctxt (Ret (Void, None)) in  TODO: hard-coded terminator case *)
-  Asm.text name (prefix @ movq_args @ entry_ins) :: labelled_elems
+  Asm.text (Platform.mangle name) (prefix @ movq_args @ entry_ins) :: labelled_elems
+  (* Asm.text (name) (prefix @ movq_args @ entry_ins) :: labelled_elems *)
 
 (* compile_gdecl ------------------------------------------------------------ *)
 (* Compile a global value into an X86 global data declaration and map
