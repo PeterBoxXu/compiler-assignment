@@ -206,9 +206,12 @@ failwith "compile_gep not implemented"
    - Bitcast: does nothing interesting at the assembly level
 *)
 let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
-  let lookup_layout_uid = lookup ctxt.layout uid in
+  (* print_string "into compile_insn.\n"; *)
+  (* "store" don't have a place in layout*)
+  (* print_string (X86.string_of_operand (lookup_layout_uid) ^ "\n"); *)
   begin match i with
   | Binop (bop, _, op1, op2) -> 
+    let lookup_layout_uid = lookup ctxt.layout uid in
     let binop_ll_to_x86 (bop: Ll.bop) : X86.opcode = 
       begin match bop with
       | Add -> Addq
@@ -230,17 +233,20 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     Movq, [~%Rsi; lookup_layout_uid]]
   
   | Icmp (cnd, _, op1, op2) -> 
+    let lookup_layout_uid = lookup ctxt.layout uid in
     [compile_operand ctxt (~%Rdi) op2;
     compile_operand ctxt (~%Rsi) op1;
     Cmpq, [~%Rdi; ~%Rsi];
     Set (compile_cnd cnd), [lookup_layout_uid]]
 
   | Alloca _ ->
-    print_string ("Alloca\n");
+    let lookup_layout_uid = lookup ctxt.layout uid in
+    (* print_string ("Alloca\n"); *)
     [Subq, [~$8; ~%Rsp];
     Movq, [~%Rsp; lookup_layout_uid]]
 
   | Load (t, op) -> 
+    let lookup_layout_uid = lookup ctxt.layout uid in
     begin match op with
     | Id _  
     | Gid _ ->
@@ -250,7 +256,7 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     | _ -> failwith "load op cannot be a constant or null"
     end
   | Store (t, op1, op2) -> 
-    print_string ("Store\n");
+    (* print_string ("Store\n"); *)
     (* failwith "Store"; *)
     [compile_operand ctxt (~%Rdi) op1;
     compile_operand ctxt (~%Rsi) op2;
