@@ -223,18 +223,20 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     end
     in
     (* ctxt.layout <- (uid, result_layout_entry) :: ctxt.layout; *)
-    [compile_operand ctxt (~%Rcx) op1;
-    compile_operand ctxt (~%Rsi) op2;
+    (* WARNING: ORDER HERE HAS BEEN SWITCHED! *)
+    [compile_operand ctxt (~%Rcx) op2;
+    compile_operand ctxt (~%Rsi) op1;
     (binop_ll_to_x86 bop), [~%Rcx; ~%Rsi];
     Movq, [~%Rsi; lookup_layout_uid]]
   
   | Icmp (cnd, _, op1, op2) -> 
-    [compile_operand ctxt (~%Rdi) op1;
-    compile_operand ctxt (~%Rsi) op2;
+    [compile_operand ctxt (~%Rdi) op2;
+    compile_operand ctxt (~%Rsi) op1;
     Cmpq, [~%Rdi; ~%Rsi];
     Set (compile_cnd cnd), [lookup_layout_uid]]
 
   | Alloca _ ->
+    print_string ("Alloca\n");
     [Subq, [~$8; ~%Rsp];
     Movq, [~%Rsp; lookup_layout_uid]]
 
@@ -248,6 +250,8 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     | _ -> failwith "load op cannot be a constant or null"
     end
   | Store (t, op1, op2) -> 
+    print_string ("Store\n");
+    (* failwith "Store"; *)
     [compile_operand ctxt (~%Rdi) op1;
     compile_operand ctxt (~%Rsi) op2;
     Movq, [~%Rdi; Ind2(Rsi)]]
