@@ -237,15 +237,18 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     [compile_operand ctxt (~%Rdi) op2;
     compile_operand ctxt (~%Rsi) op1;
     Cmpq, [~%Rdi; ~%Rsi];
+    Movq, [Imm(Lit 0L); lookup_layout_uid];
     Set (compile_cnd cnd), [lookup_layout_uid]]
 
   | Alloca _ ->
+    (* Safety: clear memory slot? *)
     let lookup_layout_uid = lookup ctxt.layout uid in
     (* print_string ("Alloca\n"); *)
     [Subq, [~$8; ~%Rsp];
     Movq, [~%Rsp; lookup_layout_uid]]
 
   | Load (t, op) -> 
+    (* TODO: clear memory slot!!!!!!!!!!!! *)
     let lookup_layout_uid = lookup ctxt.layout uid in
     begin match op with
     | Id _  
