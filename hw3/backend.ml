@@ -226,7 +226,18 @@ let rec size_ty (tdecls:(tid * ty) list) (t:Ll.ty) : int =
       by the path so far
 *)
 let compile_gep (ctxt:ctxt) (op : Ll.ty * Ll.operand) (path: Ll.operand list) : ins list =
-failwith "compile_gep not implemented"
+(* failwith "compile_gep not implemented" *)
+  begin match fst op with
+  | Ptr _ ->
+    let read_base = compile_operand ctxt (~%Rax) (snd op) in
+    let read_first_idx = compile_operand ctxt (~%Rdi) (List.hd path) in
+    let nth_sibling = 
+      [Imulq, [~$(size_ty ctxt.tdecls (fst op)); ~%Rdi];
+       Addq, [~%Rdi; ~%Rax]]
+    in
+
+  | _ -> failwith "compile_gep: op not a pointer"
+  end
 
 
 
