@@ -246,7 +246,7 @@ failwith "compile_gep not implemented"
    - Bitcast: does nothing interesting at the assembly level
 *)
 let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
-  (* print_string "into compile_insn.\n"; *)
+  print_string ("into compile_insn:" ^ Llutil.string_of_insn i ^ "\n");
   (* "store" don't have a place in layout*)
   (* print_string (X86.string_of_operand (lookup_layout_uid) ^ "\n"); *)
   begin match i with
@@ -306,13 +306,14 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     let save_caller_saved = save_caller_saved () in
     let restore_caller_saved = restore_caller_saved () in
     let move_params = move_params ctxt args in
-    let lookup_layout_uid = lookup ctxt.layout uid in
     (* let call = [Callq, [Ind3(Lbl (Platform.mangle op), Rip)]] in *)
     let call = [Callq, [Imm(Lbl (Platform.mangle op))]] in
-    let movq_result = [Movq, [~%Rax; lookup_layout_uid]] in
     begin match t with
     | Void -> save_caller_saved @ move_params @ call @ restore_caller_saved
-    | _ -> save_caller_saved @ move_params @ call @ movq_result @ restore_caller_saved 
+    | _ -> 
+      let lookup_layout_uid = lookup ctxt.layout uid in
+      let movq_result = [Movq, [~%Rax; lookup_layout_uid]] in
+      save_caller_saved @ move_params @ call @ movq_result @ restore_caller_saved 
     (* No type checking here ! Weird! *)
     end
   | _ -> failwith "compile_insn not implemented"
@@ -451,7 +452,6 @@ let stack_layout (args : uid list) ((block, lbled_blocks):cfg) : layout =
 (* let find_func_term = failwith "find_func_term not implemented" *)
 
 let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg }:fdecl) : prog =
-(* Only empty body now. TODO. *)
   let layout = stack_layout f_param f_cfg in
   let arg_locs = List.mapi (fun idx _ -> arg_loc idx) f_param in
   let arg_layout = List.map (lookup layout) f_param in
@@ -466,9 +466,7 @@ let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg
   let ctxt = {tdecls = tdecls; layout = layout} in
   let entry_ins = compile_block (Platform.mangle name) ctxt (fst f_cfg) in 
   let labelled_elems = List.map (fun (lbl, blk) -> compile_lbl_block name lbl ctxt blk) (snd f_cfg)  in
-  (* let suffix = compile_terminator name ctxt (Ret (Void, None)) in  TODO: hard-coded terminator case *)
   Asm.gtext (Platform.mangle name) (prefix @ movq_args @ entry_ins) :: labelled_elems
-  (* Asm.text (name) (prefix @ movq_args @ entry_ins) :: labelled_elems *)
 
 (* compile_gdecl ------------------------------------------------------------ *)
 (* Compile a global value into an X86 global data declaration and map
