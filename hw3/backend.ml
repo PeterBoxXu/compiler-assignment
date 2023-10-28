@@ -121,6 +121,46 @@ let compile_operand (ctxt:ctxt) (dest:X86.operand) : Ll.operand -> ins =
    needed). ]
 *)
 
+let save_caller_saved () : X86.ins list = 
+  [Pushq, [~%Rax];
+  Pushq, [~%Rcx];
+  Pushq, [~%Rdx];
+  Pushq, [~%Rsi];
+  Pushq, [~%Rdi];
+  Pushq, [~%R08];
+  Pushq, [~%R09];
+  Pushq, [~%R10];
+  Pushq, [~%R11];]
+
+let restore_caller_saved () : X86.ins list =
+  [Popq, [~%R11];
+  Popq, [~%R10];
+  Popq, [~%R09];
+  Popq, [~%R08];
+  Popq, [~%Rdi];
+  Popq, [~%Rsi];
+  Popq, [~%Rdx];
+  Popq, [~%Rcx];
+  Popq, [~%Rax];]
+
+let move_params (ctxt:ctxt) (args: (ty * Ll.operand) list) : X86.ins list = 
+  let move_param_x86 (i: int) (operand: Ll.operand): X86.ins =
+    begin match i with
+    | 0 -> (compile_operand ctxt ~%Rdi) operand
+    | 1 -> (compile_operand ctxt ~%Rsi) operand
+    | 2 -> (compile_operand ctxt ~%Rdx) operand
+    | 3 -> (compile_operand ctxt ~%Rcx) operand
+    | 4 -> (compile_operand ctxt ~%R08) operand
+    | 5 -> (compile_operand ctxt ~%R09) operand
+    | _ -> 
+      begin match operand with
+      | Id uid -> Pushq, [lookup ctxt.layout uid]
+      | Const c -> Pushq, [Imm(Lit c)]
+      | _ -> failwith "move_params: operand not implemented"
+      end
+    end 
+  in
+  List.rev (List.mapi move_param_x86 (snd (List.split args)))
 
 
 
@@ -243,7 +283,6 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
   | Alloca _ ->
     (* Safety: clear memory slot? *)
     let lookup_layout_uid = lookup ctxt.layout uid in
-    (* print_string ("Alloca\n"); *)
     [Subq, [~$8; ~%Rsp];
     Movq, [~%Rsp; lookup_layout_uid]]
 
@@ -259,12 +298,23 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     | _ -> failwith "load op cannot be a constant or null"
     end
   | Store (t, op1, op2) -> 
-    (* print_string ("Store\n"); *)
-    (* failwith "Store"; *)
     [compile_operand ctxt (~%Rdi) op1;
     compile_operand ctxt (~%Rsi) op2;
     Movq, [~%Rdi; Ind2(Rsi)]]
     (* No type checking here ! Weird! *)
+  | Call (t, Gid op, args) -> 
+    let save_caller_saved = save_caller_saved () in
+    let restore_caller_saved = restore_caller_saved () in
+    let move_params = move_params ctxt args in
+    let lookup_layout_uid = lookup ctxt.layout uid in
+    (* let call = [Callq, [Ind3(Lbl (Platform.mangle op), Rip)]] in *)
+    let call = [Callq, [Imm(Lbl (Platform.mangle op))]] in
+    let movq_result = [Movq, [~%Rax; lookup_layout_uid]] in
+    begin match t with
+    | Void -> save_caller_saved @ move_params @ call @ restore_caller_saved
+    | _ -> save_caller_saved @ move_params @ call @ movq_result @ restore_caller_saved 
+    (* No type checking here ! Weird! *)
+    end
   | _ -> failwith "compile_insn not implemented"
   end
 
@@ -405,9 +455,12 @@ let compile_fdecl (tdecls:(tid * ty) list) (name:string) ({ f_ty; f_param; f_cfg
   let layout = stack_layout f_param f_cfg in
   let arg_locs = List.mapi (fun idx _ -> arg_loc idx) f_param in
   let arg_layout = List.map (lookup layout) f_param in
-  let movq_pair_oprd (s: X86.operand) (d: X86.operand) : (X86.ins) = 
-    X86.Movq, [s; d] in 
-  let movq_args = List.map2 movq_pair_oprd arg_locs arg_layout in
+  let movq_pair_oprd (s: X86.operand) (d: X86.operand) : (X86.ins) list = 
+    (* Stupid Method : *)
+    [X86.Movq, [s; ~%Rax];
+    X86.Movq, [~%Rax; d]] 
+    in 
+  let movq_args = List.flatten (List.map2 movq_pair_oprd arg_locs arg_layout) in
   let rsp_offset = 8 * List.length (layout) in
   let prefix = [Pushq, [~%Rbp]; Movq, [~%Rsp; ~%Rbp]; Subq, [~$rsp_offset; ~%Rsp]] in
   let ctxt = {tdecls = tdecls; layout = layout} in
