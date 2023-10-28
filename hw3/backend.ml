@@ -246,9 +246,7 @@ failwith "compile_gep not implemented"
    - Bitcast: does nothing interesting at the assembly level
 *)
 let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
-  print_string ("into compile_insn:" ^ Llutil.string_of_insn i ^ "\n");
   (* "store" don't have a place in layout*)
-  (* print_string (X86.string_of_operand (lookup_layout_uid) ^ "\n"); *)
   begin match i with
   | Binop (bop, _, op1, op2) -> 
     let lookup_layout_uid = lookup ctxt.layout uid in
@@ -316,6 +314,10 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
       save_caller_saved @ move_params @ call @ movq_result @ restore_caller_saved 
     (* No type checking here ! Weird! *)
     end
+  | Bitcast (t1, op, t2) -> 
+    let lookup_layout_uid = lookup ctxt.layout uid in
+    [compile_operand ctxt (~%Rsi) op;
+    Movq, [~%Rsi; lookup_layout_uid]]
   | _ -> failwith "compile_insn not implemented"
   end
 
