@@ -187,10 +187,18 @@ let move_params (ctxt:ctxt) (args: (ty * Ll.operand) list) : X86.ins list =
      Your function should simply return 0 in those cases
 *)
 let rec size_ty (tdecls:(tid * ty) list) (t:Ll.ty) : int =
-failwith "size_ty not implemented"
-
-
-
+(* failwith "size_ty not implemented" *)
+  begin match t with
+  | Void 
+  | I8 
+  | Fun _ -> 0
+  | I1 
+  | I64 
+  | Ptr _ -> 8
+  | Namedt tid -> size_ty tdecls (lookup tdecls tid)
+  | Struct ts -> List.fold_left (fun acc x -> acc + (size_ty tdecls x)) 0 ts
+  | Array (n, t) -> n * (size_ty tdecls t)
+  end
 
 (* Generates code that computes a pointer value.
 
