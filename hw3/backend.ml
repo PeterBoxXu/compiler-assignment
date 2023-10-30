@@ -235,12 +235,24 @@ let compile_gep (ctxt:ctxt) (op : Ll.ty * Ll.operand) (path: Ll.operand list) : 
       [Imulq, [~$(size_ty ctxt.tdecls (fst op)); ~%Rdi];
        Addq, [~%Rdi; ~%Rax]] (*  ~%Rax stores the final address to return *)
     in
-    let read_nth_child (current: ty * (ins list)) (idx: Ll.operand) : ty * ins list = 
+    let rec read_nth_child (current: ty * (ins list)) (idx: Ll.operand) : ty * ins list = 
       begin match fst current with
       | Struct ts -> 
-        let read_idx: ins = compile_operand ctxt (~%Rdi) idx in
-        failwith "compile_gep: struct not implemented"
-
+        (* let read_idx: ins = compile_operand ctxt (~%Rdi) idx in *)
+        begin match idx with
+        | Const c -> 
+          let current_ty = List.nth ts (Int64.to_int c) in
+          let rec add_offset (i: int) (lst: ty list) (result: int) : int =
+            if (i = 0) then result
+            else add_offset (i-1) lst (result + size_ty ctxt.tdecls (List.nth lst (i-1)))
+          in
+          let offset = add_offset (Int64.to_int c) ts 0 in
+          let add_displacement =
+            [Addq, [~$offset; ~%Rax]]
+          in
+          current_ty, (snd current) @ add_displacement
+        | _ -> failwith "Struct idx not a const!"
+        end
       | Array (n, t') -> 
         let current_ty = t' in
         let read_idx: ins = compile_operand ctxt (~%Rdi) idx in
@@ -249,7 +261,9 @@ let compile_gep (ctxt:ctxt) (op : Ll.ty * Ll.operand) (path: Ll.operand list) : 
           Addq, [~%Rdi; ~%Rax]] (*  ~%Rax stores the final address to return *)
         in
         current_ty, (snd current) @ add_displacement
-
+      | Namedt tid ->
+        let current_ty = lookup ctxt.tdecls tid in
+        read_nth_child (current_ty, snd current) idx
       | _ ->
         print_string (Llutil.string_of_ty t);
         print_string ("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
