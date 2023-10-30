@@ -228,14 +228,39 @@ let rec size_ty (tdecls:(tid * ty) list) (t:Ll.ty) : int =
 let compile_gep (ctxt:ctxt) (op : Ll.ty * Ll.operand) (path: Ll.operand list) : ins list =
 (* failwith "compile_gep not implemented" *)
   begin match fst op with
-  | Ptr _ ->
+  | Ptr t ->
     let read_base = compile_operand ctxt (~%Rax) (snd op) in
     let read_first_idx = compile_operand ctxt (~%Rdi) (List.hd path) in
     let nth_sibling = 
       [Imulq, [~$(size_ty ctxt.tdecls (fst op)); ~%Rdi];
-       Addq, [~%Rdi; ~%Rax]]
+       Addq, [~%Rdi; ~%Rax]] (*  ~%Rax stores the final address to return *)
     in
+    let read_nth_child (current: ty * (ins list)) (idx: Ll.operand) : ty * ins list = 
+      begin match fst current with
+      | Struct ts -> 
+        let read_idx: ins = compile_operand ctxt (~%Rdi) idx in
+        failwith "compile_gep: struct not implemented"
 
+      | Array (n, t') -> 
+        let current_ty = t' in
+        let read_idx: ins = compile_operand ctxt (~%Rdi) idx in
+        let add_displacement = 
+          [Imulq, [~$(size_ty ctxt.tdecls current_ty); ~%Rdi];
+          Addq, [~%Rdi; ~%Rax]] (*  ~%Rax stores the final address to return *)
+        in
+        current_ty, (snd current) @ add_displacement
+
+      | _ ->
+        print_string (Llutil.string_of_ty t);
+        print_string ("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+        failwith "compile_gep: t not a struct or array"
+      end
+    in
+    let nth_child = snd (List.fold_left read_nth_child (t, []) (List.tl path)) in
+    read_base ::
+    read_first_idx :: 
+    nth_sibling @ 
+    nth_child
   | _ -> failwith "compile_gep: op not a pointer"
   end
 
@@ -337,6 +362,10 @@ let compile_insn (ctxt:ctxt) ((uid:uid), (i:Ll.insn)) : X86.ins list =
     let lookup_layout_uid = lookup ctxt.layout uid in
     [compile_operand ctxt (~%Rsi) op;
     Movq, [~%Rsi; lookup_layout_uid]]
+  | Gep (t, op, path) -> 
+    let lookup_layout_uid = lookup ctxt.layout uid in
+    let compile_gep = compile_gep ctxt (t, op) path in
+    compile_gep @ [Movq, [~%Rax; lookup_layout_uid]]
   | _ -> failwith "compile_insn not implemented"
   end
 
