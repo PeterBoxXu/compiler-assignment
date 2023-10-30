@@ -406,13 +406,10 @@ let mk_lbl (fn:string) (l:string) = fn ^ "." ^ l
 let compile_terminator (fn:string) (ctxt:ctxt) (t:Ll.terminator) : ins list =
   let restore_stack = [Movq, [~%Rbp; ~%Rsp]; Popq, [~%Rbp]; Retq, [];] in
   begin match t with
-  | Ret (Void, None) 
-  | Ret (_, Some Null) -> 
+  | Ret (Void, None) ->
     [Movq, [~$0; ~%Rax]] @ restore_stack
-  | Ret (_, Some Const c) ->
-    [Movq, [Imm(Lit c); ~%Rax]] @ restore_stack
-  | Ret (_, Some Id uid) ->
-    [Movq, [lookup ctxt.layout uid; ~%Rax]] @ restore_stack
+  | Ret (_, Some op) ->
+    (compile_operand ctxt (~%Rax) op) :: restore_stack
   | Br lbl -> [Jmp, [Imm (Lbl (mk_lbl fn lbl))]]
   | Cbr (Id op, lbl1, lbl2) ->
     [Movq, [lookup ctxt.layout op; ~%Rax];

@@ -1,5 +1,5 @@
 
-let prefix = Test_config.global_prefix ^ "./compiler-design-eth-tests/03/dbernhard/"
+let prefix = "./dbernhard/"
 
 let dbernhard_tests = [
     prefix ^ "load_simple.ll", 23L
