@@ -260,7 +260,7 @@ let compile_gep (ctxt:ctxt) (op : Ll.ty * Ll.operand) (path: Ll.operand list) : 
           [Imulq, [~$(size_ty ctxt.tdecls current_ty); ~%Rdi];
           Addq, [~%Rdi; ~%Rax]] (*  ~%Rax stores the final address to return *)
         in
-        current_ty, (snd current) @ add_displacement
+        current_ty, (snd current) @ (read_idx :: add_displacement)
       | Namedt tid ->
         let current_ty = lookup ctxt.tdecls tid in
         read_nth_child (current_ty, snd current) idx
