@@ -3,3 +3,5 @@
 _build
 main.native
 *.txt
+output
+a.out
