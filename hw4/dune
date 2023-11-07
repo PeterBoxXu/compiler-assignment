@@ -1,0 +1,32 @@
+(menhir
+  (modules ll/llparser)
+  (infer true)
+  (merge_into llparser))
+
+(menhir
+  (modules parser)
+  (infer true)
+  (merge_into parser))
+
+(rule
+ (target lllexer.ml)
+ (deps   ll/lllexer.mll)
+ (action (run ocamllex -o %{target} %{deps})))
+
+(rule
+ (target lexer.ml)
+ (deps   lexer.mll)
+ (action (run ocamllex -o %{target} %{deps})))
+
+
+
+(executable
+ (name main)
+ (modules (:standard \ ll-original))
+ (libraries unix str num))
+
+(env
+(dev
+(flags (:standard -warn-error -A -no-strict-formats))))
+
+(include_subdirs unqualified)
