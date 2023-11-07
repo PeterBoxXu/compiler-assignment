@@ -5,3 +5,4 @@ main.native
 *.txt
 output
 a.out
+**/run_tests_log
