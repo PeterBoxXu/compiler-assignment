@@ -142,6 +142,7 @@ ty:
 gexp:
   | t=rtyp NULL  { loc $startpos $endpos @@ CNull t }
   | i=INT      { loc $startpos $endpos @@ CInt i }
+  | s=STRING   { loc $startpos $endpos @@ CStr s }
   | b=BOOL     { loc $startpos $endpos @@ CBool b }
   // (* Explicitly initialized global array *)
   | NEW t=ty BRACKETS LBRACE es=separated_list(COMMA, gexp) RBRACE
@@ -154,6 +155,7 @@ lhs:
 
 exp:
   | i=INT               { loc $startpos $endpos @@ CInt i }
+  | s=STRING            { loc $startpos $endpos @@ CStr s }
   | t=rtyp NULL           { loc $startpos $endpos @@ CNull t }
   | b=BOOL              { loc $startpos $endpos @@ CBool b }
   | e1=exp b=bop e2=exp { loc $startpos $endpos @@ Bop (b, e1, e2) }
