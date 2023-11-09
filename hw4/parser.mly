@@ -192,6 +192,12 @@ stmt:
   | RETURN e=exp SEMI   { loc $startpos $endpos @@ Ret(Some e) }
   | FOR LPAREN vs=vdecls SEMI e=exp SEMI s=stmt RPAREN b=block
                         { loc $startpos $endpos @@ For(vs, Some(e), Some(s), b) }
+  | FOR LPAREN vs=vdecls SEMI SEMI s=stmt RPAREN b=block
+                        { loc $startpos $endpos @@ For(vs, None, Some(s), b) }
+  | FOR LPAREN vs=vdecls SEMI e=exp SEMI RPAREN b=block
+                        { loc $startpos $endpos @@ For(vs, Some(e), None, b) }
+  | FOR LPAREN vs=vdecls SEMI SEMI RPAREN b=block
+                        { loc $startpos $endpos @@ For(vs, None, None, b) }
   | WHILE LPAREN e=exp RPAREN b=block  
                         { loc $startpos $endpos @@ While(e, b) } 
 
