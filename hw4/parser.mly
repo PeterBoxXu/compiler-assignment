@@ -51,6 +51,7 @@ let loc (startpos:Lexing.position) (endpos:Lexing.position) (elt:'a) : 'a node =
 %token RPAREN   /* ) */
 %token LBRACKET /* [ */
 %token RBRACKET /* ] */
+%token BRACKETS /* [] */
 %token TILDE    /* ~ */
 %token BANG     /* ! */
 %token GLOBAL   /* global */
@@ -113,7 +114,7 @@ ty:
 
 %inline rtyp:
   | TSTRING { RString }
-  | t=ty LBRACKET RBRACKET { RArray t }
+  | t=ty BRACKETS { RArray t }
 
 %inline bop:
   | PLUS   { Add }
@@ -142,8 +143,8 @@ gexp:
   | t=rtyp NULL  { loc $startpos $endpos @@ CNull t }
   | i=INT      { loc $startpos $endpos @@ CInt i }
   | b=BOOL     { loc $startpos $endpos @@ CBool b }
-  (* Explicitly initialized global array *)
-  | NEW t=ty LBRACKET RBRACKET LBRACE es=separated_list(COMMA, gexp) RBRACE
+  // (* Explicitly initialized global array *)
+  | NEW t=ty BRACKETS LBRACE es=separated_list(COMMA, gexp) RBRACE
                         { loc $startpos $endpos @@ CArr (t, es) }
 
 lhs:  
@@ -164,7 +165,7 @@ exp:
                         { loc $startpos $endpos @@ Call (e,es) }
   | LPAREN e=exp RPAREN { e }
   (* Explicitly initialized local array *)
-  | NEW t=ty LBRACKET RBRACKET LBRACE es=separated_list(COMMA, exp) RBRACE
+  | NEW t=ty BRACKETS LBRACE es=separated_list(COMMA, exp) RBRACE
                         { loc $startpos $endpos @@ CArr (t, es) }
   (* Default-initialize int and bool array *)
   | NEW TINT LBRACKET e=exp RBRACKET

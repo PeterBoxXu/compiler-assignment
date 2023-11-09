@@ -57,6 +57,7 @@
   ( ")", RPAREN);
   ( "[", LBRACKET);
   ( "]", RBRACKET);
+  ("[]", BRACKETS);
 
   ( "<<", SHL);
   ( ">>", SHR);
@@ -143,7 +144,7 @@ rule token = parse
   | whitespace+ { token lexbuf }
   | newline { newline lexbuf; token lexbuf }
 
-  | ';' | ',' | '{' | '}' | '+' | '-' | '*' | '=' | "==" 
+  | "[]" | ';' | ',' | '{' | '}' | '+' | '-' | '*' | '=' | "==" 
   | "!=" | '!' | '~' | '(' | ')' | '[' | ']' 
   | "<<" | ">>" | ">>>" | '<' | "<=" | '>' | ">=" | '&' | '|' | "[&]" | "[|]"
     { create_token lexbuf }
