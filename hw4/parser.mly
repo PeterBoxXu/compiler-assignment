@@ -142,6 +142,9 @@ gexp:
   | t=rtyp NULL  { loc $startpos $endpos @@ CNull t }
   | i=INT      { loc $startpos $endpos @@ CInt i }
   | b=BOOL     { loc $startpos $endpos @@ CBool b }
+  (* Explicitly initialized global array *)
+  | NEW t=ty LBRACKET RBRACKET LBRACE es=separated_list(COMMA, gexp) RBRACE
+                        { loc $startpos $endpos @@ CArr (t, es) }
 
 lhs:  
   | id=IDENT            { loc $startpos $endpos @@ Id id }
@@ -160,6 +163,9 @@ exp:
   | e=exp LPAREN es=separated_list(COMMA, exp) RPAREN
                         { loc $startpos $endpos @@ Call (e,es) }
   | LPAREN e=exp RPAREN { e }
+  (* Explicitly initialized local array *)
+  | NEW t=ty LBRACKET RBRACKET LBRACE es=separated_list(COMMA, exp) RBRACE
+                        { loc $startpos $endpos @@ CArr (t, es) }
   (* Default-initialize int and bool array *)
   | NEW TINT LBRACKET e=exp RBRACKET
                         { loc $startpos $endpos @@ NewArr (TInt, e) }
