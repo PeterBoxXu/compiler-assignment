@@ -22,6 +22,7 @@ let loc (startpos:Lexing.position) (endpos:Lexing.position) (elt:'a) : 'a node =
 %token ELSE     /* else */
 %token WHILE    /* while */
 %token RETURN   /* return */
+%token NEW      /* new */
 %token VAR      /* var */
 %token SEMI     /* ; */
 %token COMMA    /* , */
@@ -158,7 +159,12 @@ exp:
                         { loc $startpos $endpos @@ Index (e, i) }
   | e=exp LPAREN es=separated_list(COMMA, exp) RPAREN
                         { loc $startpos $endpos @@ Call (e,es) }
-  | LPAREN e=exp RPAREN { e } 
+  | LPAREN e=exp RPAREN { e }
+  (* Default-initialize int and bool array *)
+  | NEW TINT LBRACKET e=exp RBRACKET
+                        { loc $startpos $endpos @@ NewArr (TInt, e) }
+  | NEW TBOOL LBRACKET e=exp RBRACKET
+                        { loc $startpos $endpos @@ NewArr (TBool, e) }
 
 vdecl:
   | VAR id=IDENT EQ init=exp { (id, init) }

@@ -39,6 +39,7 @@
   ("global", GLOBAL);
   ("true", BOOL true);
   ("false", BOOL false);
+  ("new", NEW);
 
   (* Symbols *)
   ( ";", SEMI);
