@@ -304,6 +304,27 @@ let oat_alloc_array (t:Ast.ty) (size:Ll.operand) : Ll.ty * operand * stream =
 
 *)
 
+
+(* Compile a global initializer, returning the resulting LLVMlite global
+   declaration, and a list of additional global declarations.
+
+   Tips:
+   - Only CNull, CBool, CInt, CStr, and CArr can appear as global initializers
+     in well-formed OAT programs. Your compiler may throw an error for the other
+     cases
+
+   - OAT arrays are always handled via pointers. A global array of arrays will
+     be an array of pointers to arrays emitted as additional global declarations.
+*)
+
+let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
+  begin match e.elt with
+  | CNull rty -> (cmp_rty rty, GNull), []
+  | CBool b -> (I1, GInt (if b then 1L else 0L)), []
+  | CInt i -> (I64, GInt i), []
+  | _ -> failwith "cmp_gexp: CStr and CArr not implemented"
+  end
+
 let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
   failwith "cmp_exp not implemented"
 
@@ -370,8 +391,7 @@ let cmp_global_ctxt (c:Ctxt.t) (p:Ast.prog) : Ctxt.t =
       | Ast.Gvdecl { elt={ name; init } } ->
         let gd, suffix = cmp_gexp c init in
         let decls = (name, gd)::suffix in
-        List.fold_left (fun c (gid, gdecl) -> Ctxt.add c gid ()) c decls
-        
+        List.fold_left (fun c (gid, gdecl) -> Ctxt.add c gid (fst gdecl, Gid gid)) c decls
       | _ -> c
     ) c p
 
@@ -389,26 +409,6 @@ let cmp_global_ctxt (c:Ctxt.t) (p:Ast.prog) : Ctxt.t =
 
 let cmp_fdecl (c:Ctxt.t) (f:Ast.fdecl node) : Ll.fdecl * (Ll.gid * Ll.gdecl) list =
   failwith "cmp_fdecl not implemented"
-
-(* Compile a global initializer, returning the resulting LLVMlite global
-   declaration, and a list of additional global declarations.
-
-   Tips:
-   - Only CNull, CBool, CInt, CStr, and CArr can appear as global initializers
-     in well-formed OAT programs. Your compiler may throw an error for the other
-     cases
-
-   - OAT arrays are always handled via pointers. A global array of arrays will
-     be an array of pointers to arrays emitted as additional global declarations.
-*)
-
-let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
-  begin match e with
-  | CNull rty -> (cmp_rty rty, GNull), []
-  | CBool b -> (I1, GInt (if b then 1L else 0L)), []
-  | CInt i -> (I64, GInt i), []
-  | _ -> failwith "cmp_gexp: CStr and CArr not implemented"
-  end
 
 (* Oat internals function context ------------------------------------------- *)
 let internals = [
