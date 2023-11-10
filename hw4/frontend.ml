@@ -366,7 +366,14 @@ let cmp_function_ctxt (c:Ctxt.t) (p:Ast.prog) : Ctxt.t =
    in well-formed programs. (The constructors starting with C). 
 *)
 let cmp_global_ctxt (c:Ctxt.t) (p:Ast.prog) : Ctxt.t =
-  failwith "cmp_global_ctxt not implemented"
+    List.fold_left (fun c -> function
+      | Ast.Gvdecl { elt={ name; init } } ->
+        let gd, suffix = cmp_gexp c init in
+        let decls = (name, gd)::suffix in
+        List.fold_left (fun c (gid, gdecl) -> Ctxt.add c gid ()) c decls
+        
+      | _ -> c
+    ) c p
 
 (* Compile a function declaration in global context c. Return the LLVMlite cfg
    and a list of global declarations containing the string literals appearing
@@ -396,7 +403,12 @@ let cmp_fdecl (c:Ctxt.t) (f:Ast.fdecl node) : Ll.fdecl * (Ll.gid * Ll.gdecl) lis
 *)
 
 let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
-  failwith "cmp_gexp not implemented"
+  begin match e with
+  | CNull rty -> (cmp_rty rty, GNull), []
+  | CBool b -> (I1, GInt (if b then 1L else 0L)), []
+  | CInt i -> (I64, GInt i), []
+  | _ -> failwith "cmp_gexp: CStr and CArr not implemented"
+  end
 
 (* Oat internals function context ------------------------------------------- *)
 let internals = [
