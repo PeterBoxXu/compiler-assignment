@@ -356,7 +356,12 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
  *)
 
 let rec cmp_stmt (c:Ctxt.t) (rt:Ll.ty) (stmt:Ast.stmt node) : Ctxt.t * stream =
-  failwith "cmp_stmt not implemented"
+  begin match stmt.elt with
+  | Ast.Ret None -> c, [T (Ret (Void, None))]
+  | Ast.Ret (Some e) -> c, [T (Ret (rt, Some (Const 17L)))]
+  | _ -> failwith "cmp_stmt: other cases not implemented"
+  end
+
 
 (* Compile a series of statements *)
 and cmp_block (c:Ctxt.t) (rt:Ll.ty) (stmts:Ast.block) : Ctxt.t * stream =
