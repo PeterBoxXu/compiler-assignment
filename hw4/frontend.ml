@@ -408,19 +408,29 @@ let cmp_global_ctxt (c:Ctxt.t) (p:Ast.prog) : Ctxt.t =
  *)
 
 let cmp_fdecl (c:Ctxt.t) (f:Ast.fdecl node) : Ll.fdecl * (Ll.gid * Ll.gdecl) list =
-  
   let {frtyp; fname; args; body} = f.elt in
-  let fty = cmp_fty (List.map fst args, frtyp) in
+  let f_ty = cmp_fty (List.map fst args, frtyp) in
   let f_param = List.map snd args in
-  let prefix_stream = List.map (fun (ast_ty, ast_id) -> 
-      let ll_id = gensym ast_id in
-      let ptr_id = gensym "ptr" in
-      let dummy_id = gensym "store" in
-      let ll_ty = cmp_ty ast_ty in
-      [ E (dummy_id, Store(ll_ty, Id ll_id, Id ptr_id));
-        E (ptr_id, Alloca (ll_ty))]
-    ) args in
-  
+  let build_prefix (base: Ctxt.t * stream) (arg: (Ast.ty * Ast.id)): Ctxt.t * stream =
+    let ast_ty = fst arg in
+    let ast_id = snd arg in
+    let ll_id = gensym ast_id in
+    let ptr_id = gensym "ptr" in
+    let dummy_id = gensym "store" in
+    let ll_ty = cmp_ty ast_ty in
+    let stream_prefix = 
+    [ E (dummy_id, Store(ll_ty, Id ll_id, Id ptr_id));
+      E (ptr_id, Alloca (ll_ty))]
+    in
+    let new_ctxt = Ctxt.add (fst base) ast_id (ll_ty, Id ll_id) in
+    (new_ctxt, stream_prefix @ (snd base))
+  in
+  let (ctxt, prefix) = List.fold_left build_prefix (c, []) args in
+  let (ctxt, body_stream) = cmp_block ctxt (snd f_ty) body in
+  (* Why cmp_block need return type? *)
+  let (f_cfg, gdecls) = cfg_of_stream (prefix @ body_stream) in
+  let fdecl = { f_ty; f_param; f_cfg } in
+  (fdecl, gdecls)
 
 
 (* Oat internals function context ------------------------------------------- *)
