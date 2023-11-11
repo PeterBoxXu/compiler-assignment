@@ -328,10 +328,28 @@ let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
 let bop_ast_to_ll (binop: binop) (op1: Ll.operand) (op2: Ll.operand) : Ll.ty * Ll.operand * stream =
   let uid = gensym (Astlib.ml_string_of_binop binop) in
   begin match binop with
-  | Ast.Add ->
-    I64, Id uid, [I (uid, Binop (Ll.Add, I64, op1, op2))]
-  | _ -> failwith"foo"
+  (* | Add | Mul | Sub | Shl | Shr | Sar | IAnd | IOr -> (TInt, TInt, TInt) *)
+  | Ast.Add -> I64, Id uid, [I (uid, Binop (Ll.Add, I64, op1, op2))]
+  | Ast.Sub -> I64, Id uid, [I (uid, Binop (Ll.Sub, I64, op1, op2))]
+  | Ast.Mul -> I64, Id uid, [I (uid, Binop (Ll.Mul, I64, op1, op2))]
+  | Ast.Shl -> I64, Id uid, [I (uid, Binop (Ll.Shl, I64, op1, op2))]
+  | Ast.Sar -> I64, Id uid, [I (uid, Binop (Ll.Ashr, I64, op1, op2))]
+  | Ast.Shr -> I64, Id uid, [I (uid, Binop (Ll.Lshr, I64, op1, op2))]
+  | Ast.IAnd -> I64, Id uid, [I (uid, Binop (Ll.And, I64, op1, op2))]
+  | Ast.IOr -> I64, Id uid, [I (uid, Binop (Ll.Or, I64, op1, op2))]
+  (* | Eq | Neq | Lt | Lte | Gt | Gte -> (TInt, TInt, TBool) *)
+  | Ast.Eq -> I1, Id uid, [I (uid, Icmp (Ll.Eq, I64, op1, op2))]
+  | Ast.Neq -> I1, Id uid, [I (uid, Icmp (Ll.Ne, I64, op1, op2))]
+  | Ast.Lt -> I1, Id uid, [I (uid, Icmp (Ll.Slt, I64, op1, op2))]
+  | Ast.Lte -> I1, Id uid, [I (uid, Icmp (Ll.Sle, I64, op1, op2))]
+  | Ast.Gt -> I1, Id uid, [I (uid, Icmp (Ll.Sgt, I64, op1, op2))]
+  | Ast.Gte -> I1, Id uid, [I (uid, Icmp (Ll.Sge, I64, op1, op2))]
+  (* | And | Or -> (TBool, TBool, TBool) *)
+  | Ast.And -> I1, Id uid, [I (uid, Binop (Ll.And, I1, op1, op2))]
+  | Ast.Or -> I1, Id uid, [I (uid, Binop (Ll.Or, I1, op1, op2))]
+  (* | _ -> failwith"foo" *)
   end
+
 
 
 let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
