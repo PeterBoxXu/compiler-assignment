@@ -325,8 +325,28 @@ let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
   | _ -> failwith "cmp_gexp: CStr and CArr not implemented"
   end
 
+let bop_ast_to_ll (binop: binop) (op1: Ll.operand) (op2: Ll.operand) : Ll.ty * Ll.operand * stream =
+  let uid = gensym (Astlib.ml_string_of_binop binop) in
+  begin match binop with
+  | Ast.Add ->
+    I64, Id uid, [I (uid, Binop (Ll.Add, I64, op1, op2))]
+  | _ -> failwith"foo"
+  end
+
+
 let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
-  failwith "cmp_exp not implemented"
+  begin match exp.elt with
+  | CBool b -> I1, Const (if b then 1L else 0L), []
+  | CInt i -> I64, Const i, []
+  | Bop (bop, e1, e2) -> 
+    let (t1, op1, s1) = cmp_exp c e1 in
+    let (t2, op2, s2) = cmp_exp c e2 in
+    let (t3, op3, s3) = bop_ast_to_ll bop op1 op2 in
+    t3, op3, s1 >@ s2 >@ s3
+
+  | _ -> failwith "cmp_exp: other cases not implemented"
+  end
+
 
 (* Compile a statement in context c with return typ rt. Return a new context, 
    possibly extended with new local bindings, and the instruction stream
@@ -358,7 +378,9 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
 let rec cmp_stmt (c:Ctxt.t) (rt:Ll.ty) (stmt:Ast.stmt node) : Ctxt.t * stream =
   begin match stmt.elt with
   | Ast.Ret None -> c, [T (Ret (Void, None))]
-  | Ast.Ret (Some e) -> c, [T (Ret (rt, Some (Const 17L)))]
+  | Ast.Ret (Some e) -> 
+    let (t, op, s) = cmp_exp c e in
+    c, s >@ [T (Ret (rt, Some op))] (* why not t ?*)
   | _ -> failwith "cmp_stmt: other cases not implemented"
   end
 
@@ -419,7 +441,7 @@ let cmp_fdecl (c:Ctxt.t) (f:Ast.fdecl node) : Ll.fdecl * (Ll.gid * Ll.gdecl) lis
   let build_prefix (base: Ctxt.t * stream) (arg: (Ast.ty * Ast.id)): Ctxt.t * stream =
     let ast_ty = fst arg in
     let ast_id = snd arg in
-    let ll_id = gensym ast_id in
+    let ll_id = ast_id in
     let ptr_id = gensym "ptr" in
     let dummy_id = gensym "store" in
     let ll_ty = cmp_ty ast_ty in
