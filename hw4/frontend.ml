@@ -350,7 +350,16 @@ let bop_ast_to_ll (binop: binop) (op1: Ll.operand) (op2: Ll.operand) : Ll.ty * L
   (* | _ -> failwith"foo" *)
   end
 
-
+let unop_ast_to_ll (unop: unop) (op: Ll.operand) : Ll.ty * Ll.operand * stream =
+  let uid = gensym (Astlib.ml_string_of_unop unop) in
+  begin match unop with
+  (* | Neg | Bitnot -> (TInt, TInt) *)
+  | Ast.Neg -> I64, Id uid, [I (uid, Binop (Ll.Sub, I64, Const 0L, op))]
+  | Ast.Bitnot -> I64, Id uid, [I (uid, Binop (Ll.Xor, I64, op, Const (-1L)))]
+  (* | Lognot -> (TBool, TBool) *)
+  | Ast.Lognot -> I1, Id uid, [I (uid, Binop (Ll.Xor, I1, op, Const 1L))]
+  (* | _ -> failwith "foo" *)
+  end
 
 let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
   begin match exp.elt with
@@ -361,7 +370,10 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let (t2, op2, s2) = cmp_exp c e2 in
     let (t3, op3, s3) = bop_ast_to_ll bop op1 op2 in
     t3, op3, s1 >@ s2 >@ s3
-
+  | Uop (unop, e) ->
+    let (t1, op1, s1) = cmp_exp c e in
+    let (t2, op2, s2) = unop_ast_to_ll unop op1 in
+    t2, op2, s1 >@ s2
   | _ -> failwith "cmp_exp: other cases not implemented"
   end
 
