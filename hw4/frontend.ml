@@ -365,15 +365,10 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
   begin match exp.elt with
   | Id id -> 
     let t, op = Ctxt.lookup id c in
-    begin match op with 
-    | Ll.Gid _ -> t, op, []
-    | Ll.Id _ -> 
-      let load_id = gensym "load" in
-      begin match t with
-      | Ptr deref_t -> deref_t, Ll.Id load_id, [I (load_id, Load (t, op))]
-      | _ -> failwith "cmp_exp: Id not a pointer"
-      end
-    | _ -> failwith "cmp_exp: Id not a Gid or Id"
+    let load_id = gensym "load" in
+    begin match t with
+    | Ptr deref_t -> deref_t, Ll.Id load_id, [I (load_id, Load (t, op))]
+    | _ -> failwith "cmp_exp: Gid not a pointer"
     end
   | CBool b -> I1, Const (if b then 1L else 0L), []
   | CInt i -> I64, Const i, []
@@ -468,7 +463,7 @@ let cmp_global_ctxt (c:Ctxt.t) (p:Ast.prog) : Ctxt.t =
       | Ast.Gvdecl { elt={ name; init } } ->
         let gd, suffix = cmp_gexp c init in
         let decls = (name, gd)::suffix in
-        List.fold_left (fun c (gid, gdecl) -> Ctxt.add c gid (fst gdecl, Gid gid)) c decls
+        List.fold_left (fun c (gid, gdecl) -> Ctxt.add c gid (Ptr(fst gdecl), Gid gid)) c decls
       | _ -> c
     ) c p
 
