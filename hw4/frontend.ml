@@ -364,11 +364,16 @@ let unop_ast_to_ll (unop: unop) (op: Ll.operand) : Ll.ty * Ll.operand * stream =
 let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
   begin match exp.elt with
   | Id id -> 
-    let ptr_t, ptr_op = Ctxt.lookup id c in
-    let load_id = gensym "load" in
-    begin match ptr_t with
-    | Ptr t -> t, Id load_id, [I (load_id, Load (ptr_t, ptr_op))]
-    | _ -> failwith "cmp_exp: Id not a pointer"
+    let t, op = Ctxt.lookup id c in
+    begin match op with 
+    | Ll.Gid _ -> t, op, []
+    | Ll.Id _ -> 
+      let load_id = gensym "load" in
+      begin match t with
+      | Ptr deref_t -> deref_t, Ll.Id load_id, [I (load_id, Load (t, op))]
+      | _ -> failwith "cmp_exp: Id not a pointer"
+      end
+    | _ -> failwith "cmp_exp: Id not a Gid or Id"
     end
   | CBool b -> I1, Const (if b then 1L else 0L), []
   | CInt i -> I64, Const i, []
