@@ -414,6 +414,21 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
 
  let rec cmp_stmt (c:Ctxt.t) (rt:Ll.ty) (stmt:Ast.stmt node) : Ctxt.t * stream =
   begin match stmt.elt with
+  | Ast.Assn (e1, e2) ->
+    let (t2, op2, s2) = cmp_exp c e2 in
+    let load_stream = begin match e1.elt with
+    | Ast.Id id -> 
+      let (t1, op1) = Ctxt.lookup id c in
+      let dummy_id = gensym "store" in
+      [I (dummy_id, Store(t2, op2, op1))]
+    | Index _ -> failwith "cmp_stmt: Index not yet implemented"
+    | _ -> failwith "cmp_stmt: Not a valid lhs"
+    end in
+    c, s2 >@ load_stream
+    (* let load_stream = [I ()] *)
+    (* let assn_stream = [I (tmp_id, Load (t2, op2));
+                       I (dummy_id)] *)
+
   | Ast.Ret None -> c, [T (Ret (Void, None))]
   | Ast.Ret (Some e) -> 
     let (t, op, s) = cmp_exp c e in
@@ -442,8 +457,26 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     [L else_lbl] >@
     else_stream in
     c, s
-
-  | _ -> failwith "cmp_stmt: other cases not implemented"
+  | Ast.While (e, body_stmts) ->
+    let (t, op, e_stream) = cmp_exp c e in
+    let test_lbl = gensym "test" in
+    let loop_lbl = gensym "loop" in
+    let done_lbl = gensym "done" in
+    let test_elt = [T (Ll.Cbr(op, loop_lbl, done_lbl))] in
+    let br_elt   = [T (Ll.Br (test_lbl))] in
+    let body_ctxt, body_stream = cmp_block c rt body_stmts in
+    let s =
+    (* ja. so silly *)
+    br_elt >@
+    [L test_lbl] >@
+    e_stream >@
+    test_elt >@
+    [L loop_lbl] >@
+    body_stream >@
+    br_elt >@
+    [L done_lbl] in
+    c, s
+  | _ -> Astlib.print_stmt stmt; failwith "cmp_stmt: other cases not implemented"
   end
 
 
