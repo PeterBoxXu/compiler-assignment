@@ -445,7 +445,9 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let (t, op, e_stream) = cmp_exp c e in
     let then_lbl = gensym "then" in
     let else_lbl = gensym "else" in
+    let done_lbl = gensym "done" in
     let if_elt = [T (Ll.Cbr(op, then_lbl, else_lbl))] in
+    let br_to_done = [T (Ll.Br (done_lbl))] in
     (* no update to ctxt here! *)
     let then_ctxt, then_stream = cmp_block c rt then_stmts in
     let else_ctxt, else_stream = cmp_block c rt else_stmts in (* need then_context? *)
@@ -454,8 +456,11 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     if_elt >@
     [L then_lbl] >@
     then_stream >@
+    br_to_done >@
     [L else_lbl] >@
-    else_stream in
+    else_stream >@
+    br_to_done >@
+    [L done_lbl] in
     c, s
   | Ast.While (e, body_stmts) ->
     let (t, op, e_stream) = cmp_exp c e in
