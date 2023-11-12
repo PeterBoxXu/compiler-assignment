@@ -476,6 +476,23 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     br_elt >@
     [L done_lbl] in
     c, s
+  | Ast.For (vdecls, e, end_stmt_opt, body_stmts) ->
+    let build_vdecl_stream (base: Ctxt.t * stream) (vdecl: Ast.vdecl) : Ctxt.t * stream =
+      let ctxt, s = base in
+      let new_ctxt, new_s = cmp_stmt ctxt rt (no_loc (Decl vdecl)) in
+      new_ctxt, s >@ new_s
+    in
+    let prep_c, prep_stream = List.fold_left build_vdecl_stream (c, []) vdecls in
+    let cnd = begin match e with
+    | Some exp -> exp
+    | None -> no_loc (CBool true)
+    end in
+    let end_stmt = begin match end_stmt_opt with
+    | Some stmt -> [stmt]
+    | None -> []
+    end in 
+    let while_c, while_stream = cmp_stmt prep_c rt (no_loc (While (cnd, body_stmts @ end_stmt))) in
+    while_c, prep_stream >@ while_stream
   | _ -> Astlib.print_stmt stmt; failwith "cmp_stmt: other cases not implemented"
   end
 
