@@ -412,7 +412,7 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
 
  *)
 
-let rec cmp_stmt (c:Ctxt.t) (rt:Ll.ty) (stmt:Ast.stmt node) : Ctxt.t * stream =
+ let rec cmp_stmt (c:Ctxt.t) (rt:Ll.ty) (stmt:Ast.stmt node) : Ctxt.t * stream =
   begin match stmt.elt with
   | Ast.Ret None -> c, [T (Ret (Void, None))]
   | Ast.Ret (Some e) -> 
@@ -426,6 +426,23 @@ let rec cmp_stmt (c:Ctxt.t) (rt:Ll.ty) (stmt:Ast.stmt node) : Ctxt.t * stream =
     let s' = [E (dummy_id, Store (t, op, Id ll_id));
               E (ll_id, Alloca t)] in
     new_ctxt, s >@ s'
+  | Ast.If (e, then_stmts, else_stmts) ->
+    let (t, op, e_stream) = cmp_exp c e in
+    let then_lbl = gensym "then" in
+    let else_lbl = gensym "else" in
+    let if_elt = [T (Ll.Cbr(op, then_lbl, else_lbl))] in
+    (* no update to ctxt here! *)
+    let then_ctxt, then_stream = cmp_block c rt then_stmts in
+    let else_ctxt, else_stream = cmp_block c rt else_stmts in (* need then_context? *)
+    let s = 
+    e_stream >@
+    if_elt >@
+    [L then_lbl] >@
+    then_stream >@
+    [L else_lbl] >@
+    else_stream in
+    c, s
+
   | _ -> failwith "cmp_stmt: other cases not implemented"
   end
 
