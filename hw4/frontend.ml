@@ -363,6 +363,13 @@ let unop_ast_to_ll (unop: unop) (op: Ll.operand) : Ll.ty * Ll.operand * stream =
 
 let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
   begin match exp.elt with
+  | Id id -> 
+    let ptr_t, ptr_op = Ctxt.lookup id c in
+    let load_id = gensym "load" in
+    begin match ptr_t with
+    | Ptr t -> t, Id load_id, [I (load_id, Load (ptr_t, ptr_op))]
+    | _ -> failwith "cmp_exp: Id not a pointer"
+    end
   | CBool b -> I1, Const (if b then 1L else 0L), []
   | CInt i -> I64, Const i, []
   | Bop (bop, e1, e2) -> 
@@ -411,6 +418,14 @@ let rec cmp_stmt (c:Ctxt.t) (rt:Ll.ty) (stmt:Ast.stmt node) : Ctxt.t * stream =
   | Ast.Ret (Some e) -> 
     let (t, op, s) = cmp_exp c e in
     c, s >@ [T (Ret (rt, Some op))] (* why not t ?*)
+  | Ast.Decl (id, e) -> 
+    let ll_id = gensym id in
+    let dummy_id = gensym "store" in
+    let (t, op, s) = cmp_exp c e in
+    let new_ctxt = Ctxt.add c id (Ptr(t), Id (ll_id)) in
+    let s' = [E (dummy_id, Store (t, op, Id ll_id));
+              E (ll_id, Alloca t)] in
+    new_ctxt, s >@ s'
   | _ -> failwith "cmp_stmt: other cases not implemented"
   end
 
