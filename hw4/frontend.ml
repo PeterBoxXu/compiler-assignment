@@ -387,8 +387,8 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     | _ -> failwith "cmp_exp: call is not start with the id"
     end in
     let ptr_fty, fname = Ctxt.lookup_function id c in
-    let fty, rt_ty = begin match ptr_fty with
-    | Ptr (Fun (args, ret)) -> Fun (args, ret), ret
+    let rt_ty = begin match ptr_fty with
+    | Ptr (Fun (args, ret)) -> ret
     | _ -> failwith "cmp_exp: function type not a pointer"
     end in
     let build_args (base: (Ll.ty * Ll.operand) list * stream) (e: exp node) 
@@ -399,7 +399,7 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     in
     let args, args_s = List.fold_left build_args ([], []) exps in
     let call_id = gensym "call" in
-    let call_s = [I (call_id, Ll.Call(fty, fname, args))] in
+    let call_s = [I (call_id, Ll.Call(rt_ty, fname, args))] in
     rt_ty, Ll.Id (call_id), args_s >@ call_s
   | _ -> failwith "cmp_exp: other cases not implemented"
   end
@@ -518,7 +518,10 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     end in 
     let while_c, while_stream = cmp_stmt prep_c rt (no_loc (While (cnd, body_stmts @ end_stmt))) in
     while_c, prep_stream >@ while_stream
-  | _ -> Astlib.print_stmt stmt; failwith "cmp_stmt: other cases not implemented"
+  | Ast.SCall (e, exps) ->
+    let call_ty, call_operand, call_s = cmp_exp c (no_loc (Ast.Call(e, exps))) in
+    c, call_s
+  (* | _ -> Astlib.print_stmt stmt; failwith "cmp_stmt: other cases not implemented" *)
   end
 
 
