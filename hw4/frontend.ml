@@ -381,6 +381,22 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let (t1, op1, s1) = cmp_exp c e in
     let (t2, op2, s2) = unop_ast_to_ll unop op1 in
     t2, op2, s1 >@ s2
+  | Call (e, exps) -> 
+    let id = begin match e.elt with
+    | Id i -> i
+    | _ -> failwith "cmp_exp: call is not start with the id"
+    end in
+    let fty, fname = Ctxt.lookup_function id c in
+    let build_args (base: (Ll.ty * Ll.operand) list * stream) (e: exp node) 
+                    : (Ll.ty * Ll.operand) list * stream =
+      let arg_list, s = base in
+      let e_ty, e_operand, e_s = cmp_exp c e in
+      arg_list @ [(e_ty, e_operand)], s >@ e_s
+    in
+    let args, args_s = List.fold_left build_args ([], []) exps in
+    let call_id = gensym "call" in
+    let call_s = [I (call_id, Ll.Call(fty, fname, args))] in
+    fty, fname, args_s >@ call_s
   | _ -> failwith "cmp_exp: other cases not implemented"
   end
 
