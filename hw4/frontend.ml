@@ -582,11 +582,12 @@ let cmp_fdecl (c:Ctxt.t) (f:Ast.fdecl node) : Ll.fdecl * (Ll.gid * Ll.gdecl) lis
     let ptr_id = gensym "ptr" in
     let dummy_id = gensym "store" in
     let ll_ty = cmp_ty ast_ty in
+    let ptr_ty = Ll.Ptr(ll_ty) in
     let stream_prefix = 
     [ E (dummy_id, Store(ll_ty, Id ll_id, Id ptr_id));
       E (ptr_id, Alloca (ll_ty))]
     in
-    let new_ctxt = Ctxt.add (fst base) ast_id (ll_ty, Id ll_id) in
+    let new_ctxt = Ctxt.add (fst base) ast_id (ptr_ty, Id ptr_id) in
     (new_ctxt, stream_prefix @ (snd base))
   in
   let (ctxt, prefix) = List.fold_left build_prefix (c, []) args in
