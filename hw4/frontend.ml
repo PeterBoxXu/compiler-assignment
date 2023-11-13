@@ -386,7 +386,11 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     | Id i -> i
     | _ -> failwith "cmp_exp: call is not start with the id"
     end in
-    let fty, fname = Ctxt.lookup_function id c in
+    let ptr_fty, fname = Ctxt.lookup_function id c in
+    let fty, rt_ty = begin match ptr_fty with
+    | Ptr (Fun (args, ret)) -> Fun (args, ret), ret
+    | _ -> failwith "cmp_exp: function type not a pointer"
+    end in
     let build_args (base: (Ll.ty * Ll.operand) list * stream) (e: exp node) 
                     : (Ll.ty * Ll.operand) list * stream =
       let arg_list, s = base in
@@ -396,7 +400,7 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let args, args_s = List.fold_left build_args ([], []) exps in
     let call_id = gensym "call" in
     let call_s = [I (call_id, Ll.Call(fty, fname, args))] in
-    fty, fname, args_s >@ call_s
+    rt_ty, Ll.Id (call_id), args_s >@ call_s
   | _ -> failwith "cmp_exp: other cases not implemented"
   end
 
