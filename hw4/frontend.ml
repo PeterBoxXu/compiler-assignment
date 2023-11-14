@@ -322,6 +322,7 @@ let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
   | CNull rty -> (cmp_rty rty, GNull), []
   | CBool b -> (I1, GInt (if b then 1L else 0L)), []
   | CInt i -> (I64, GInt i), []
+  | CStr s -> (Array ((String.length s) + 1, I8), GString s), []
   | _ -> failwith "cmp_gexp: CStr and CArr not implemented"
   end
 
@@ -367,6 +368,10 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let t, op = Ctxt.lookup id c in
     let load_id = gensym "load" in
     begin match t with
+    | Ptr (Array (n, I8)) ->
+      let string_id = gensym "bitcast_str" in
+      let string_stream = [I (string_id, Bitcast(t, op, (Ptr(I8))))] in
+      Ptr I8, Ll.Id string_id, string_stream
     | Ptr deref_t -> deref_t, Ll.Id load_id, [I (load_id, Load (t, op))]
     | _ -> failwith "cmp_exp: Gid not a pointer"
     end
@@ -558,7 +563,11 @@ let cmp_global_ctxt (c:Ctxt.t) (p:Ast.prog) : Ctxt.t =
       | Ast.Gvdecl { elt={ name; init } } ->
         let gd, suffix = cmp_gexp c init in
         let decls = (name, gd)::suffix in
-        List.fold_left (fun c (gid, gdecl) -> Ctxt.add c gid (Ptr(fst gdecl), Gid gid)) c decls
+        let build_global_ctxt (c: Ctxt.t) (base: id * Ll.gdecl) : Ctxt.t =
+          let gid, gdecl = base in
+          Ctxt.add c gid (Ptr(fst gdecl), Gid gid)
+        in
+        List.fold_left build_global_ctxt c decls
       | _ -> c
     ) c p
 
