@@ -320,7 +320,7 @@ let oat_alloc_array (t:Ast.ty) (size:Ll.operand) : Ll.ty * operand * stream =
 
 let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
   begin match e.elt with
-  | CNull rty -> (cmp_rty rty, GNull), []
+  | CNull rty -> (Ptr (cmp_rty rty), GNull), []
   | CBool b -> (I1, GInt (if b then 1L else 0L)), []
   | CInt i -> (I64, GInt i), []
   | CStr s -> (Array ((String.length s) + 1, I8), GString s), []
@@ -394,7 +394,7 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     begin match t with
     | Ptr (Array (n, I8)) ->
       let string_ptr_id = gensym "bitcast_str_out" in
-      let string_stream = [I (string_ptr_id, Bitcast(t, op, (Ptr(I8))))] in
+      let string_stream = [I (string_ptr_id, Bitcast(t, op, (Ptr(I8))))] in (* where is G ?*)
       Ptr I8, Ll.Id string_ptr_id, string_stream
     | Ptr deref_t -> deref_t, Ll.Id load_id, [I (load_id, Load (t, op))]
     | _ -> failwith "cmp_exp: Gid not a pointer"
@@ -410,7 +410,16 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
       [I (string_ptr_id, Bitcast(Ptr t, op, (Ptr(I8))));
       G (string_raw_id, (t, GString s))]
     in
-    Ptr(I8), Ll.Id string_ptr_id, string_stream          
+    Ptr(I8), Ll.Id string_ptr_id, string_stream
+  (* | CArr (t, exps) -> 
+    let n = List.length exps in
+    let arr_ty, arr_op, arr_stream = oat_alloc_array t (Const (Int64.of_int n)) in
+    failwith"" *)
+  | NewArr (t, e) ->
+    (* Warning: Maybe not set to 0 !*)
+    let sub_t, sub_operand, sub_s = cmp_exp c e in
+    let arr_ty, arr_op, arr_stream = oat_alloc_array t sub_operand in
+    arr_ty, arr_op, arr_stream
   | Bop (bop, e1, e2) -> 
     let (t1, op1, s1) = cmp_exp c e1 in
     let (t2, op2, s2) = cmp_exp c e2 in
