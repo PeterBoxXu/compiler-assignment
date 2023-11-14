@@ -260,6 +260,7 @@ let typ_of_unop : Ast.unop -> Ast.ty * Ast.ty = function
 
 *) 
 
+(* Zikang: How to add an instruction like global bitcast above? *)
 
 
 (* Some useful helper functions *)
@@ -323,7 +324,30 @@ let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
   | CBool b -> (I1, GInt (if b then 1L else 0L)), []
   | CInt i -> (I64, GInt i), []
   | CStr s -> (Array ((String.length s) + 1, I8), GString s), []
-  | _ -> failwith "cmp_gexp: CStr and CArr not implemented"
+  | CArr (t, exps) ->  
+    let n = List.length exps in
+    let arr_partial_type = Array(n, cmp_ty t) in
+    let arr_exact_type = Struct[I64; arr_partial_type] in
+    let build_array_ginit (base: Ll.gdecl list * (Ll.gid * Ll.gdecl) list) (exp: Ast.exp node) 
+    : Ll.gdecl list * (Ll.gid * Ll.gdecl) list =
+      let gdecl_list, additional_gdecl_list = base in
+      let this_gdecl, this_additional_gdecl_list = cmp_gexp c exp in
+      [this_gdecl] >@ gdecl_list, additional_gdecl_list >@ this_additional_gdecl_list 
+    in
+    let sub_gdecls, sub_additional_gdecls = List.fold_left build_array_ginit ([], []) exps in
+    let build_additional_gdecls (base: (Ll.gid * Ll.gdecl) list) (gdecl: Ll.gdecl) : (Ll.gid * Ll.gdecl) list =
+      begin match fst gdecl with
+      | Array _ -> base >@ [gensym "sub_arr", gdecl]
+      | _ -> base
+      end
+    in
+    let current_additional_gdecls = 
+      List.fold_left build_additional_gdecls sub_additional_gdecls sub_gdecls 
+    in
+    let current_ginit = GStruct [I64, GInt (Int64.of_int n); arr_partial_type, GArray (sub_gdecls)] in
+    (arr_exact_type, current_ginit), current_additional_gdecls (* GArray of (ty * ginit) list == gdecl list*)
+    (* Wrong initialize order!*)
+  | _ -> failwith "cmp_gexp: this type should not be implemented"
   end
 
 let bop_ast_to_ll (binop: binop) (op1: Ll.operand) (op2: Ll.operand) : Ll.ty * Ll.operand * stream =
