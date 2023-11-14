@@ -369,14 +369,24 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let load_id = gensym "load" in
     begin match t with
     | Ptr (Array (n, I8)) ->
-      let string_id = gensym "bitcast_str" in
-      let string_stream = [I (string_id, Bitcast(t, op, (Ptr(I8))))] in
-      Ptr I8, Ll.Id string_id, string_stream
+      let string_ptr_id = gensym "bitcast_str_out" in
+      let string_stream = [I (string_ptr_id, Bitcast(t, op, (Ptr(I8))))] in
+      Ptr I8, Ll.Id string_ptr_id, string_stream
     | Ptr deref_t -> deref_t, Ll.Id load_id, [I (load_id, Load (t, op))]
     | _ -> failwith "cmp_exp: Gid not a pointer"
     end
   | CBool b -> I1, Const (if b then 1L else 0L), []
   | CInt i -> I64, Const i, []
+  | CStr s -> 
+    let string_ptr_id = gensym "bitcast_str_in" in
+    let string_raw_id = gensym "string" in
+    let t = Array ((String.length s) + 1, I8) in
+    let op = Gid string_raw_id in
+    let string_stream = 
+      [I (string_ptr_id, Bitcast(Ptr t, op, (Ptr(I8))));
+      G (string_raw_id, (t, GString s))]
+    in
+    Ptr(I8), Ll.Id string_ptr_id, string_stream          
   | Bop (bop, e1, e2) -> 
     let (t1, op1, s1) = cmp_exp c e1 in
     let (t2, op2, s2) = cmp_exp c e2 in
