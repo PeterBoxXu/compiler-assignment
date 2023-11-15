@@ -410,12 +410,12 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let (t_src, op_src, s_src) = cmp_exp c src in
     let (t_id, op_id, s_id) = cmp_exp c idx in
     let elem_type, array_type = match t_src with
-    | Ptr (Struct [elem_ty; arr_ty]) -> elem_ty, arr_ty
+    | Ptr (Struct [I64; Ll.Array (n, elem_ty)]) -> elem_ty, Ll.Array (n, elem_ty)
     | _ -> 
           print_string (Llutil.string_of_ty t_src); print_newline ();
           failwith "cmp_exp::Ast.Assn::Ast.Index : elem_type not valid"
     in
-    let gep_type = Ptr (Struct [elem_type; array_type]) in
+    let gep_type = Ptr (Struct [I64; array_type]) in
     let ptr_id = gensym "gep" in
     let load_elem_id = gensym "load_elem" in
     let gep_stream = [I (load_elem_id, Load(Ptr elem_type, Id ptr_id));
