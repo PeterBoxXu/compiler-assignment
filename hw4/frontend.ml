@@ -328,6 +328,7 @@ let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
     let n = List.length exps in
     let arr_partial_type = Array(n, cmp_ty t) in
     let arr_exact_type = Struct[I64; arr_partial_type] in
+    let arr_bitcasted_type = Struct[I64; Array(0, cmp_ty t)] in
     let build_array_ginit (base: Ll.gdecl list * (Ll.gid * Ll.gdecl) list) (exp: Ast.exp node) 
     : Ll.gdecl list * (Ll.gid * Ll.gdecl) list =
       let gdecl_list, additional_gdecl_list = base in
@@ -335,17 +336,23 @@ let rec cmp_gexp c (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.gdecl) list =
       [this_gdecl] >@ gdecl_list, additional_gdecl_list >@ this_additional_gdecl_list 
     in
     let sub_gdecls, sub_additional_gdecls = List.fold_left build_array_ginit ([], []) exps in
+
+    let garray_id = gensym "global_arr" in
+    let current_ginit = GStruct [I64, GInt (Int64.of_int n); arr_partial_type, GArray (sub_gdecls)] in
+    let array_content_gdecl = [garray_id, (arr_exact_type, current_ginit)] in
+    let bitcast_ginit = GBitcast (Ptr arr_exact_type, GGid garray_id, Ptr arr_bitcasted_type) in
+
     let build_additional_gdecls (base: (Ll.gid * Ll.gdecl) list) (gdecl: Ll.gdecl) : (Ll.gid * Ll.gdecl) list =
       begin match fst gdecl with
       | Array _ -> base >@ [gensym "sub_arr", gdecl]
       | _ -> base
       end
     in
-    let current_additional_gdecls = 
+    let sub_additional_gdecls = 
       List.fold_left build_additional_gdecls sub_additional_gdecls sub_gdecls 
     in
-    let current_ginit = GStruct [I64, GInt (Int64.of_int n); arr_partial_type, GArray (sub_gdecls)] in
-    (arr_exact_type, current_ginit), current_additional_gdecls (* GArray of (ty * ginit) list == gdecl list*)
+
+    (Ptr arr_bitcasted_type, bitcast_ginit), array_content_gdecl >@ sub_additional_gdecls (* GArray of (ty * ginit) list == gdecl list*)
     (* Wrong initialize order!*)
   | _ -> failwith "cmp_gexp: this type should not be implemented"
   end
@@ -399,6 +406,21 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     | Ptr deref_t -> deref_t, Ll.Id load_id, [I (load_id, Load (t, op))]
     | _ -> failwith "cmp_exp: Gid not a pointer"
     end
+  | Index (src, idx) ->
+    let (t_src, op_src, s_src) = cmp_exp c src in
+    let (t_id, op_id, s_id) = cmp_exp c idx in
+    let elem_type, array_type = match t_src with
+    | Ptr (Struct [elem_ty; arr_ty]) -> elem_ty, arr_ty
+    | _ -> 
+          print_string (Llutil.string_of_ty t_src); print_newline ();
+          failwith "cmp_exp::Ast.Assn::Ast.Index : elem_type not valid"
+    in
+    let gep_type = Ptr (Struct [elem_type; array_type]) in
+    let ptr_id = gensym "gep" in
+    let load_elem_id = gensym "load_elem" in
+    let gep_stream = [I (load_elem_id, Load(Ptr elem_type, Id ptr_id));
+                      I (ptr_id, Gep(gep_type, op_src, [Const 0L; Const 1L; op_id]))] in      
+    elem_type, Ll.Id load_elem_id, s_src >@ s_id >@ gep_stream
   | CBool b -> I1, Const (if b then 1L else 0L), []
   | CInt i -> I64, Const i, []
   | CStr s -> 
@@ -484,15 +506,29 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
   begin match stmt.elt with
   | Ast.Assn (e1, e2) ->
     let (t2, op2, s2) = cmp_exp c e2 in
-    let load_stream = begin match e1.elt with
+    let new_ctxt, load_stream = begin match e1.elt with
     | Ast.Id id -> 
       let (t1, op1) = Ctxt.lookup id c in
       let dummy_id = gensym "store" in
-      [I (dummy_id, Store(t2, op2, op1))]
-    | Index _ -> failwith "cmp_stmt: Index not yet implemented"
+      c, [I (dummy_id, Store(t2, op2, op1))]
+    | Ast.Index (src, idx) ->
+      (* let (t_src, op_src, s_src) = cmp_exp c src in
+      let (t_id, op_id, s_id) = cmp_exp c idx in
+      let elem_type, array_type = match t_src with
+      | Ptr (Struct [elem_ty; arr_ty]) -> elem_ty, arr_ty
+      | _ -> failwith "cmp_stmt::Ast.Assn::Ast.Index : elem_type not valid"
+      in
+      let gep_type = Struct [elem_type; array_type] in
+      let ptr_id = gensym "gep" in
+      let dummy_id = gensym "store" in
+      let gep_stream = [I (dummy_id, Store(t2, op2, Id ptr_id));
+                        I (ptr_id, Gep(gep_type, op_src, [Const 0L; Const 1L; op_id]))] in
+      let current_ctxt = Ctxt.add c ptr_id (Ptr t2, Id ptr_id) in
+      current_ctxt, gep_stream *)
+      failwith "cmp_stmt: Ast.Index not implemented"
     | _ -> failwith "cmp_stmt: Not a valid lhs"
     end in
-    c, s2 >@ load_stream
+    new_ctxt, s2 >@ load_stream
     (* let load_stream = [I ()] *)
     (* let assn_stream = [I (tmp_id, Load (t2, op2));
                        I (dummy_id)] *)
