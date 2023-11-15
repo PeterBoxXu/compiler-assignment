@@ -441,7 +441,7 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     (* Warning: Maybe not set to 0 !*)
     let sub_t, sub_operand, sub_s = cmp_exp c e in
     let arr_ty, arr_op, arr_stream = oat_alloc_array t sub_operand in
-    arr_ty, arr_op, arr_stream
+    arr_ty, arr_op, sub_s >@ arr_stream
   | Bop (bop, e1, e2) -> 
     let (t1, op1, s1) = cmp_exp c e1 in
     let (t2, op2, s2) = cmp_exp c e2 in
