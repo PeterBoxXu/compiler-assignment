@@ -512,20 +512,21 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
       let dummy_id = gensym "store" in
       c, [I (dummy_id, Store(t2, op2, op1))]
     | Ast.Index (src, idx) ->
-      (* let (t_src, op_src, s_src) = cmp_exp c src in
+      let (t_src, op_src, s_src) = cmp_exp c src in
       let (t_id, op_id, s_id) = cmp_exp c idx in
       let elem_type, array_type = match t_src with
-      | Ptr (Struct [elem_ty; arr_ty]) -> elem_ty, arr_ty
-      | _ -> failwith "cmp_stmt::Ast.Assn::Ast.Index : elem_type not valid"
+      | Ptr (Struct [I64; Ll.Array (n, elem_ty)]) -> elem_ty, Ll.Array (n, elem_ty)
+      | _ -> 
+            print_string (Llutil.string_of_ty t_src); print_newline ();
+            failwith "cmp_exp::Ast.Assn::Ast.Index : elem_type not valid"
       in
-      let gep_type = Struct [elem_type; array_type] in
+      let gep_type = Ptr (Struct [I64; array_type]) in
       let ptr_id = gensym "gep" in
-      let dummy_id = gensym "store" in
-      let gep_stream = [I (dummy_id, Store(t2, op2, Id ptr_id));
+      let store_elem_id = gensym "store_elem" in
+      let gep_stream = [I (store_elem_id, Store(t2, op2, Id ptr_id));
                         I (ptr_id, Gep(gep_type, op_src, [Const 0L; Const 1L; op_id]))] in
-      let current_ctxt = Ctxt.add c ptr_id (Ptr t2, Id ptr_id) in
-      current_ctxt, gep_stream *)
-      failwith "cmp_stmt: Ast.Index not implemented"
+      c, s_src >@ s_id >@ gep_stream
+      (* failwith "cmp_stmt: Ast.Index not implemented" *)
     | _ -> failwith "cmp_stmt: Not a valid lhs"
     end in
     new_ctxt, s2 >@ load_stream
