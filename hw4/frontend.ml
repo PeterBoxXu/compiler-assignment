@@ -442,6 +442,7 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let sub_t, sub_operand, sub_s = cmp_exp c e in
     let arr_ty, arr_op, arr_stream = oat_alloc_array t sub_operand in
     arr_ty, arr_op, sub_s >@ arr_stream
+    (* arr_ty, arr_op, arr_stream *)
   | Bop (bop, e1, e2) -> 
     let (t1, op1, s1) = cmp_exp c e1 in
     let (t2, op2, s2) = cmp_exp c e2 in
@@ -543,7 +544,7 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let dummy_id = gensym "store" in
     let (t, op, s) = cmp_exp c e in
     let new_ctxt = Ctxt.add c id (Ptr(t), Id (ll_id)) in
-    let s' = [E (dummy_id, Store (t, op, Id ll_id));
+    let s' = [I (dummy_id, Store (t, op, Id ll_id));
               E (ll_id, Alloca t)] in
     new_ctxt, s >@ s'
   | Ast.If (e, then_stmts, else_stmts) ->
@@ -676,7 +677,7 @@ let cmp_fdecl (c:Ctxt.t) (f:Ast.fdecl node) : Ll.fdecl * (Ll.gid * Ll.gdecl) lis
     let ll_ty = cmp_ty ast_ty in
     let ptr_ty = Ll.Ptr(ll_ty) in
     let stream_prefix = 
-    [ E (dummy_id, Store(ll_ty, Id ll_id, Id ptr_id));
+    [ E (dummy_id, Store(ll_ty, Id ll_id, Id ptr_id));  (* E or I ? E is reasonable here. *)
       E (ptr_id, Alloca (ll_ty))]
     in
     let new_ctxt = Ctxt.add (fst base) ast_id (ptr_ty, Id ptr_id) in
