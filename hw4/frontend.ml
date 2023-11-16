@@ -395,6 +395,7 @@ let unop_ast_to_ll (unop: unop) (op: Ll.operand) : Ll.ty * Ll.operand * stream =
 
 let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
   begin match exp.elt with
+  (* TODO: CNull *)
   | Id id -> 
     let t, op = Ctxt.lookup id c in
     let load_id = gensym "load" in
@@ -433,10 +434,29 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
       G (string_raw_id, (t, GString s))]
     in
     Ptr(I8), Ll.Id string_ptr_id, string_stream
-  (* | CArr (t, exps) -> 
+  | CArr (t, exps) -> 
     let n = List.length exps in
     let arr_ty, arr_op, arr_stream = oat_alloc_array t (Const (Int64.of_int n)) in
-    failwith"" *)
+    let elem_type = match arr_ty with
+    | Ptr (Struct [I64; Ll.Array (n, elem_ty)]) -> elem_ty
+    | _ -> 
+          print_string (Llutil.string_of_ty arr_ty); print_newline ();
+          failwith "cmp_exp::CArr: elem_type not valid"
+    in
+    let build_oplist_and_stream (base: Ll.operand list * stream) (exp: Ast.exp node) : Ll.operand list * stream =
+      let _, op, s = cmp_exp c exp in
+      (fst base) @ [op], (snd base) >@ s
+    in
+    let sub_op_list, sub_s = List.fold_left build_oplist_and_stream ([], []) exps in
+    let store_with_gep (base: stream * int64) (op: Ll.operand) : stream * int64 =
+      let ptr_id = gensym "gep" in
+      let store_elem_id = gensym "store_elem" in
+      let gep_stream = [I (store_elem_id, Store(elem_type, op, Id ptr_id));
+                        I (ptr_id, Gep(arr_ty, arr_op, [Const 0L; Const 1L; Const (snd base)]))] in
+      (fst base) >@ gep_stream, (Int64.add 1L (snd base))
+    in
+    let gen_and_store_stream = fst (List.fold_left store_with_gep ([], 0L) sub_op_list) in
+    arr_ty, arr_op, sub_s >@ arr_stream >@ gen_and_store_stream
   | NewArr (t, e) ->
     (* Warning: Maybe not set to 0 !*)
     let sub_t, sub_operand, sub_s = cmp_exp c e in
