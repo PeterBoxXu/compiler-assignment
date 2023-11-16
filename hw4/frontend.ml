@@ -422,6 +422,7 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let gep_stream = [I (load_elem_id, Load(Ptr elem_type, Id ptr_id));
                       I (ptr_id, Gep(gep_type, op_src, [Const 0L; Const 1L; op_id]))] in      
     elem_type, Ll.Id load_elem_id, s_src >@ s_id >@ gep_stream
+  | CNull rty -> Ptr (cmp_rty rty), Null, []
   | CBool b -> I1, Const (if b then 1L else 0L), []
   | CInt i -> I64, Const i, []
   | CStr s -> 
@@ -492,7 +493,7 @@ let rec cmp_exp (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.operand * stream =
     let call_id = gensym "call" in
     let call_s = [I (call_id, Ll.Call(rt_ty, fname, args))] in
     rt_ty, Ll.Id (call_id), args_s >@ call_s
-  | _ -> failwith "cmp_exp: other cases not implemented"
+  (* | _ -> failwith "cmp_exp: other cases not implemented" *)
   end
 
 
