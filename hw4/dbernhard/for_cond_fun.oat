@@ -1,0 +1,21 @@
+int program(int argc, string[] args) {
+    var x = 0;
+
+    for (var y = 10; y < 20; con(x, y);) {
+        var str = string_of_int(y);
+        print_string(str);
+        print_string(", ");
+
+        y = y + 1;
+        x = x + 1;
+    }
+    
+    return x;
+}
+
+/* should have no effect */
+bool con(int a, int b) {
+    a = a + 1;
+    b = b + 1;
+    return true;
+}
