@@ -3,6 +3,7 @@
 _build
 main.native
 *.txt
+!**/team.txt
 output
 a.out
 **/run_tests_log
