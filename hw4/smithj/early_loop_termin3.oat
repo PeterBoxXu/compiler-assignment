@@ -1,0 +1,10 @@
+
+int program(int argc, string[] argv) {
+	while (true) {
+		if (false) {
+			return 5;
+		}
+		return 10;
+	}
+	return 20;
+}

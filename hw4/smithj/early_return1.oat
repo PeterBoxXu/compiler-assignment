@@ -1,0 +1,17 @@
+
+global x = 10;
+
+void f() {
+	if (true) {
+		return;
+	}
+	else {
+		return;
+	}
+	x = 5;
+}
+
+int program(int argc, string[] argv) {
+	f();
+	return x;
+}
