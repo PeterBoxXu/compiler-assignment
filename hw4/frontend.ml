@@ -673,6 +673,15 @@ let cmp_global_ctxt (c:Ctxt.t) (p:Ast.prog) : Ctxt.t =
       | _ -> c
     ) c p
 
+let dummy_ret (fty: Ll.ty) : stream =
+  begin match fty with
+  | Void -> [T (Ret (Void, None))]
+  | I1 
+  | I8
+  | I64 -> [T (Ret (fty, Some (Const 0L)))]
+  | t -> [T (Ret (t, Some Null))]
+  end
+
 (* Compile a function declaration in global context c. Return the LLVMlite cfg
    and a list of global declarations containing the string literals appearing
    in the function.
@@ -707,10 +716,9 @@ let cmp_fdecl (c:Ctxt.t) (f:Ast.fdecl node) : Ll.fdecl * (Ll.gid * Ll.gdecl) lis
   let (ctxt, prefix) = List.fold_left build_prefix (c, []) args in
   let (ctxt, body_stream) = cmp_block ctxt (snd f_ty) body in
   (* Why cmp_block need return type? *)
-  let (f_cfg, gdecls) = cfg_of_stream (prefix @ body_stream) in
+  let (f_cfg, gdecls) = cfg_of_stream (prefix >@ body_stream >@ (dummy_ret (snd f_ty))) in
   let fdecl = { f_ty; f_param; f_cfg } in
   (fdecl, gdecls)
-
 
 (* Oat internals function context ------------------------------------------- *)
 let internals = [

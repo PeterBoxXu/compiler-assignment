@@ -1,0 +1,13 @@
+global arr = new int[][]{new int[]{1, 2}, new int[]{3, 4}};
+
+int program(int argc, string[] args) {
+	var size = length_of_string(args[1]);
+	if (size <= 5) {
+		return 1;
+	}
+	arr[0] = new int[size];
+	for (var i=0; i<size; i=i+1;) {
+		arr[0][i] = i;
+	}
+	return arr[0][4] + arr[1][0];
+}
