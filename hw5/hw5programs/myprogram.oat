@@ -1,0 +1,12 @@
+void debug(string msg) {
+    if (!debug) {
+        return;
+    }
+    print_string(msg);
+    return;
+}
+int program (int argc, string[] argv) {
+    var debug = "well";
+    debug("DEBUG");
+    debug = "xxlll";
+}
