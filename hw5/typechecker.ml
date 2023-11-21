@@ -47,11 +47,44 @@ let typ_of_unop : Ast.unop -> Ast.ty * Ast.ty = function
       (Don't forget about OCaml's 'and' keyword.)
 *)
 let rec subtype (c : Tctxt.t) (t1 : Ast.ty) (t2 : Ast.ty) : bool =
-  failwith "todo: subtype"
+  begin match (t1, t2) with
+  | (TInt, TInt) -> true
+  | (TBool, TBool) -> true
+  | (TNullRef rt1, TNullRef rt2)
+  | (TRef rt1, TRef rt2)
+  | (TRef rt1, TNullRef rt2) -> subtype_ref c rt1 rt2
+  | _ -> false
+ end
+  (* failwith "todo: subtype" *)
 
 (* Decides whether H |-r ref1 <: ref2 *)
 and subtype_ref (c : Tctxt.t) (t1 : Ast.rty) (t2 : Ast.rty) : bool =
-  failwith "todo: subtype_ref"
+  begin match (t1, t2) with
+  | (RString, RString) -> true
+  | (RArray t1, RArray t2) -> t1 == t2
+  | (RStruct id1, RStruct id2) -> 
+    let fields1 = lookup_struct id1 c in
+    let fields2 = lookup_struct id2 c in
+    let compare_nth_field (i:int) (f:field) : bool = (f == (List.nth fields1 i)) in
+    List.fold_left (&&) true (List.mapi compare_nth_field fields2)
+  | (RFun (args1, rt1), RFun (args2, rt2)) -> 
+    if (List.length args1) != (List.length args2) then false
+    else 
+      let subtype_nth_arg (b:bool) (t : ty * ty) : bool =
+        let (t1, t2) = t in
+        b && (subtype c t2 t1) in (* argument types are contravariant! p12, lec16 *)
+      let args = List.fold_left subtype_nth_arg true (List.combine args1 args2) in
+      args && (subtype_return c rt1 rt2)
+  | _ -> false
+  end
+
+(* Decides whether H |-rt rt1 <: rt2 *)
+and subtype_return (c : Tctxt.t) (t1 : Ast.ret_ty) (t2 : Ast.ret_ty) : bool =
+  begin match (t1, t2) with
+  | (RetVoid, RetVoid) -> true
+  | (RetVal t1, RetVal t2) -> subtype c t1 t2
+  | _ -> false
+  end
 
 
 (* well-formed types -------------------------------------------------------- *)
@@ -70,7 +103,30 @@ and subtype_ref (c : Tctxt.t) (t1 : Ast.rty) (t2 : Ast.rty) : bool =
     - tc contains the structure definition context
  *)
 let rec typecheck_ty (l : 'a Ast.node) (tc : Tctxt.t) (t : Ast.ty) : unit =
-  failwith "todo: implement typecheck_ty"
+  begin match t with
+  | TInt | TBool -> ()
+  | TRef rt -> typecheck_ref l tc rt
+  | TNullRef rt -> typecheck_ref l tc rt
+  end
+
+and typecheck_ref (l : 'a Ast.node) (tc : Tctxt.t) (t : Ast.rty) : unit =
+  begin match t with
+  | RString -> ()
+  | RArray t -> typecheck_ty l tc t
+  | RStruct id -> 
+    if (List.mem_assoc id tc.structs) then ()
+    else type_error l ("Undefined struct type " ^ id)
+  | RFun (args, ret) -> 
+    let typecheck_nth_arg (t : ty) : unit = typecheck_ty l tc t in
+    List.iter typecheck_nth_arg args;
+    typecheck_return l tc ret
+  end
+
+and typecheck_return (l : 'a Ast.node) (tc : Tctxt.t) (t : Ast.ret_ty) : unit = 
+  begin match t with
+  | RetVoid -> ()
+  | RetVal ty -> typecheck_ty l tc ty
+  end
 
 (* typechecking expressions ------------------------------------------------- *)
 (* Typechecks an expression in the typing context c, returns the type of the
