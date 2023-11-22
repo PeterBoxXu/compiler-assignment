@@ -209,6 +209,23 @@ let rec check_dups fs =
   | [] -> false
   | h :: t -> (List.exists (fun x -> x.fieldName = h.fieldName) t) || check_dups t
 
+let rec check_dup_args args = 
+  match args with
+  | [] -> false
+  | (h_ty, h_id) :: t -> (List.exists (fun (ty, id) -> id = h_id) t) || check_dup_args t
+
+let typecheck_block (tc : Tctxt.t) (ss:Ast.stmt node list) (to_ret:ret_ty) (l : 'a Ast.node) : bool =
+  let rec typecheck_block_stmt (tc: Tctxt.t) (ss': Ast.stmt node list) (to_ret:ret_ty) : Tctxt.t * bool =
+    begin match ss' with
+    | [] -> type_error l "Empty block"
+    | [s] -> typecheck_stmt tc s to_ret
+    | s :: t -> let (tc', b) = typecheck_stmt tc s to_ret in
+      if b then type_error l "Block returns in the middle"
+      else typecheck_block_stmt tc' t to_ret
+    end in
+  let (_, b) = typecheck_block_stmt tc ss to_ret in b
+  
+
 let typecheck_tdecl (tc : Tctxt.t) id fs  (l : 'a Ast.node) : unit =
   if check_dups fs
   then type_error l ("Repeated fields in " ^ id) 
@@ -222,7 +239,18 @@ let typecheck_tdecl (tc : Tctxt.t) id fs  (l : 'a Ast.node) : unit =
     - checks that the function actually returns
 *)
 let typecheck_fdecl (tc : Tctxt.t) (f : Ast.fdecl) (l : 'a Ast.node) : unit =
-  failwith "todo: typecheck_fdecl"
+  if check_dup_args f.args
+  then type_error l ("Repeated args in " ^ f.fname)
+  else 
+    let add_arg_to_local (tc: Tctxt.t) (arg: Ast.ty * Ast.id) : Tctxt.t = 
+      let (ty, id) = arg in
+      add_local tc id ty in
+    let tc' = List.fold_left add_arg_to_local tc f.args in
+    let returns = typecheck_block tc' f.body f.frtyp l in
+    if not returns then type_error l ("Function " ^ f.fname ^ " does not return")
+
+    (* let new_tc = List.fold_left (fun tc (ty, id) -> add_local tc id ty) tc f.args in *)
+
 
 (* creating the typchecking context ----------------------------------------- *)
 
@@ -269,8 +297,9 @@ let create_function_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
     | Gfdecl ({elt=f} as l) -> 
       if (List.mem_assoc f.fname tc.globals) then type_error l ("Duplicate function " ^ f.fname)
       else 
-        let args = List.map fst f.args in
-        add_global tc f.fname (TRef (RFun (args, f.frtyp)))
+        List.iter (fun (ty, _) -> typecheck_ty l tc ty) f.args;
+        let ids = List.map fst f.args in
+        add_global tc f.fname (TRef (RFun (ids, f.frtyp)))
     | _ -> tc
     end in
   List.fold_left add_decl tc p
@@ -279,7 +308,13 @@ let create_global_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
   let rec contains_global (e: exp node) : bool =
     begin match e.elt with
     | CNull _ | CBool _ | CInt _ | CStr _ -> false
-    | Id id -> List.mem_assoc id tc.globals
+    | Id id -> 
+      let ty = lookup_global_option id tc in
+      begin match ty with
+      | Some (TRef (RFun _)) -> false
+      | None -> false
+      | _ -> true
+      end
     | CArr (_, es) -> List.exists contains_global es
     | CStruct (_, fs) -> List.exists (fun (_, e) -> contains_global e) fs
     | _ -> failwith "contains_global: invalid exp"
@@ -290,7 +325,7 @@ let create_global_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
     | Gvdecl ({elt={name; init}} as l) ->
       if (List.mem_assoc name tc.globals) then type_error l ("Duplicate global " ^ name)
       else 
-        if contains_global init then type_error l ("Global initializer contains global")
+        if contains_global init then type_error l ("Global initializer contains global" ^ name)
         else 
           let ty = typecheck_exp tc init in
           add_global tc name ty
