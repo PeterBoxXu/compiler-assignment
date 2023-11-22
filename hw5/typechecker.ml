@@ -158,7 +158,7 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
   | CBool _ -> TBool
   | CInt _ -> TInt
   | CStr _ -> TRef RString
-  | _ -> type_error e "typecheck_exp: to do"
+  | _ -> failwith "typecheck_exp: to do"
   end 
 
 (* statements --------------------------------------------------------------- *)
