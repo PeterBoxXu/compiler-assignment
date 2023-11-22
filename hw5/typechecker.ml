@@ -65,8 +65,10 @@ and subtype_ref (c : Tctxt.t) (t1 : Ast.rty) (t2 : Ast.rty) : bool =
   | (RStruct id1, RStruct id2) -> 
     let fields1 = lookup_struct id1 c in
     let fields2 = lookup_struct id2 c in
-    let compare_nth_field (i:int) (f:field) : bool = (f == (List.nth fields1 i)) in
-    List.fold_left (&&) true (List.mapi compare_nth_field fields2)
+    if (List.length fields1) < (List.length fields2) then false
+    else
+      let compare_nth_field (i:int) (f:field) : bool = (f = (List.nth fields1 i)) in
+      List.fold_left (&&) true (List.mapi compare_nth_field fields2)
   | (RFun (args1, rt1), RFun (args2, rt2)) -> 
     if (List.length args1) != (List.length args2) then false
     else 
@@ -155,13 +157,27 @@ and typecheck_return (l : 'a Ast.node) (tc : Tctxt.t) (t : Ast.ret_ty) : unit =
 *)
 let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
   begin match e.elt with
+  | CNull rty -> typecheck_ty e c (TRef rty); TNullRef rty
   | CBool _ -> TBool
   | CInt _ -> TInt
   | CStr _ -> TRef RString
+  | Id id -> 
+    let t = lookup_option id c in
+    begin match t with
+    | Some ty -> ty
+    | None -> type_error e ("typecheck_exp: " ^ id ^ "undefined")
+    end
   | _ -> failwith "typecheck_exp: to do"
   end 
 
 (* statements --------------------------------------------------------------- *)
+
+let typecheck_decl (tc: Tctxt.t) (s: Ast.vdecl) : Tctxt.t =
+  let id, e = s in
+  if (List.mem_assoc id tc.locals) then type_error (no_loc s) ("typecheck_decl: " ^ id ^ "previously redefined")
+  else 
+    let t = typecheck_exp tc e in
+    Tctxt.add_local tc id t 
 
 (* Typecheck a statement 
    This function should implement the statement typechecking rules from oat.pdf.  
@@ -201,10 +217,10 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     let t' = typecheck_exp tc e in
     begin match to_ret with
     | RetVal t -> if subtype tc t' t then (tc, true)
-      else type_error s ("Subtype check failed, to_ret:" ^ (ml_string_of_ret_ty to_ret) ^ " t: " ^ (ml_string_of_ty t'))
+      else type_error s ("Subtype check failed, to_ret:" ^ (ml_string_of_ret_ty to_ret) ^ " t': " ^ (ml_string_of_ty t'))
     | _ -> type_error s ("Return type mismatch, expected" ^ (ml_string_of_ret_ty to_ret) ^ "got " ^ (ml_string_of_ty t'))
     end
-  (* | _ -> type_error s "typecheck_stmt: to do" *)
+  | Decl vd -> (typecheck_decl tc vd, false)
   | _ -> failwith "typecheck_stmt: to do"
   end 
 
