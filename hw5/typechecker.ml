@@ -269,8 +269,11 @@ let create_function_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
     | Gfdecl ({elt=f} as l) -> 
       if (List.mem_assoc f.fname tc.globals) then type_error l ("Duplicate function " ^ f.fname)
       else 
+        let args = List.map fst f.args in
+        add_global tc f.fname (TRef (RFun (args, f.frtyp)))
     | _ -> tc
     end in
+  List.fold_left add_decl tc p
 
 let create_global_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
   failwith "todo: create_function_ctxt"
