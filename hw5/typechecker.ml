@@ -158,7 +158,7 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
   | CBool _ -> TBool
   | CInt _ -> TInt
   | CStr _ -> TRef RString
-  | _ -> type_error e "typecheck_exp: exp type is invalid"
+  | _ -> type_error e "typecheck_exp: to do"
   end 
 
 (* statements --------------------------------------------------------------- *)
@@ -276,7 +276,27 @@ let create_function_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
   List.fold_left add_decl tc p
 
 let create_global_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
-  failwith "todo: create_function_ctxt"
+  let rec contains_global (e: exp node) : bool =
+    begin match e.elt with
+    | CNull _ | CBool _ | CInt _ | CStr _ -> false
+    | Id id -> List.mem_assoc id tc.globals
+    | CArr (_, es) -> List.exists contains_global es
+    | CStruct (_, fs) -> List.exists (fun (_, e) -> contains_global e) fs
+    | _ -> failwith "contains_global: invalid exp"
+    end
+  in
+  let add_decl (tc: Tctxt.t) (d: Ast.decl) : Tctxt.t =
+    begin match d with
+    | Gvdecl ({elt={name; init}} as l) ->
+      if (List.mem_assoc name tc.globals) then type_error l ("Duplicate global " ^ name)
+      else 
+        if contains_global init then type_error l ("Global initializer contains global")
+        else 
+          let ty = typecheck_exp tc init in
+          add_global tc name ty
+    | _ -> tc
+    end in
+  List.fold_left add_decl tc p
 
 
 (* This function implements the |- prog and the H ; G |- prog 
