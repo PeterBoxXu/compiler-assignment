@@ -221,6 +221,15 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     | _ -> type_error s ("Return type mismatch, expected" ^ (ml_string_of_ret_ty to_ret) ^ "got " ^ (ml_string_of_ty t'))
     end
   | Decl vd -> (typecheck_decl tc vd, false)
+  | Assn (e1, e2) ->
+    let t1 = begin match e1.elt with
+    | Proj _ | Index _ | Id _ -> typecheck_exp tc e1
+    | _ -> type_error e1 "typecheck_stmt: invalid lhs"
+    end in
+    if not ( )
+      
+      
+    
   | _ -> failwith "typecheck_stmt: to do"
   end 
 
