@@ -195,7 +195,18 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
      block typecheck rules.
 *)
 let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.t * bool =
-  failwith "todo: implement typecheck_stmt"
+  begin match s.elt with
+  | Ret None -> if to_ret = RetVoid then (tc, true) else type_error s ("Return type mismatch, expected" ^ (ml_string_of_ret_ty to_ret) ^ "got void")
+  | Ret (Some e) -> 
+    let t' = typecheck_exp tc e in
+    begin match to_ret with
+    | RetVal t -> if subtype tc t' t then (tc, true)
+      else type_error s ("Subtype check failed, to_ret:" ^ (ml_string_of_ret_ty to_ret) ^ " t: " ^ (ml_string_of_ty t'))
+    | _ -> type_error s ("Return type mismatch, expected" ^ (ml_string_of_ret_ty to_ret) ^ "got " ^ (ml_string_of_ty t'))
+    end
+  (* | _ -> type_error s "typecheck_stmt: to do" *)
+  | _ -> failwith "typecheck_stmt: to do"
+  end 
 
 
 (* struct type declarations ------------------------------------------------- *)
