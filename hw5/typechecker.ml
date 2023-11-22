@@ -154,7 +154,12 @@ and typecheck_return (l : 'a Ast.node) (tc : Tctxt.t) (t : Ast.ret_ty) : unit =
 
 *)
 let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
-  failwith "todo: implement typecheck_exp"
+  begin match e.elt with
+  | CBool _ -> TBool
+  | CInt _ -> TInt
+  | CStr _ -> TRef RString
+  | _ -> type_error e "typecheck_exp: exp type is invalid"
+  end 
 
 (* statements --------------------------------------------------------------- *)
 
@@ -227,7 +232,7 @@ let typecheck_fdecl (tc : Tctxt.t) (f : Ast.fdecl) (l : 'a Ast.node) : unit =
    create_struct_ctxt: - adds all the struct types to the struct 'H'
    context (checking to see that there are no duplicate fields
 
-     H |-s prog ==> H'
+     H |-s prog ==> H
 
 
    create_function_ctxt: - adds the the function identifiers and their
@@ -247,10 +252,25 @@ let typecheck_fdecl (tc : Tctxt.t) (f : Ast.fdecl) (l : 'a Ast.node) : unit =
    constants, but can't mention other global values *)
 
 let create_struct_ctxt (p:Ast.prog) : Tctxt.t =
-  failwith "todo: create_struct_ctxt"
+  let add_decl (tc: Tctxt.t) (d: Ast.decl) : Tctxt.t =
+    begin match d with
+    | Gtdecl ({elt=(id, fields)} as l) -> 
+      if (List.mem_assoc id tc.structs) then type_error l ("Duplicate struct type " ^ id)
+      else 
+        if check_dups fields then type_error l ("Repeated fields in " ^ id) 
+        else add_struct tc id fields
+    | _ -> tc
+    end in
+  List.fold_left add_decl Tctxt.empty p 
 
 let create_function_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
-  failwith "todo: create_function_ctxt"
+  let add_decl (tc: Tctxt.t) (d: Ast.decl) : Tctxt.t =
+    begin match d with
+    | Gfdecl ({elt=f} as l) -> 
+      if (List.mem_assoc f.fname tc.globals) then type_error l ("Duplicate function " ^ f.fname)
+      else 
+    | _ -> tc
+    end in
 
 let create_global_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
   failwith "todo: create_function_ctxt"
