@@ -222,13 +222,56 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     end
   | Decl vd -> (typecheck_decl tc vd, false)
   | Assn (e1, e2) ->
-    let t1 = begin match e1.elt with
-    | Proj _ | Index _ | Id _ -> typecheck_exp tc e1
+    (* examine the validity of lhs. The check is a two-fold:
+       1. first check if lhs is Id. If so, check if it is in local context. If not,
+        check if it is a global function id. Only when the id is either in local context, or in global but not a function id can we proceed.
+       2. If lhs is not Id, we only check if the toplevel type belongs local context. If not, raise a type error.  *)
+    begin match e1.elt with
+    | Id id -> 
+      begin match lookup_local_option id tc with
+      | Some t -> ()
+      | None -> begin match lookup_global_option id tc with
+        | None -> type_error e1 ("typecheck_stmt: " ^ id ^ "undefined")
+        | Some t -> begin match t with
+          | TRef (RFun _) -> type_error e1 ("typecheck_stmt: " ^ id ^ "is a function")
+          | _ -> ()
+          end
+        end
+      end
+    | Proj (e, _) -> 
+      let toplevel_id = 
+        begin match e.elt with
+        | Id id -> id
+        | _ -> failwith "typecheck_stmt: tried to project from non-id exp"
+        end in
+        begin match lookup_local_option toplevel_id tc with
+        | Some _ -> () (* toplevel_id is defined in local. Note here we don't check if the toplevel type is really a struct. Are we hoping the struct type check will be implemented in corresponding cases in typecheck_exp? *)
+        (* TODO: does Oat v2 allow modifying fields of global struct variables? *)
+        | None -> begin match lookup_global_option toplevel_id tc with
+          | None -> type_error e1 ("typecheck_stmt: " ^ toplevel_id ^ "undefined")
+          | Some _ -> ()
+          end
+        end
+    | Index (e, _) ->
+      let toplevel_id = 
+        begin match e.elt with
+        | Id id -> id
+        | _ -> failwith "typecheck_stmt: tried to index from non-id exp"
+        end in
+        begin match lookup_local_option toplevel_id tc with
+        | Some _ -> () (* toplevel_id is defined in local *)
+        | None -> begin match lookup_global_option toplevel_id tc with
+          | None -> type_error e1 ("typecheck_stmt: " ^ toplevel_id ^ "undefined")
+          | Some _ -> ()
+          end
+        end
     | _ -> type_error e1 "typecheck_stmt: invalid lhs"
-    end in
-    if not ( )
-      
-      
+    end;
+    (* not we proceed with a valid lhs, by performing subtyping checks *)
+    let t = typecheck_exp tc e1 in
+    let t' = typecheck_exp tc e2 in
+    if subtype tc t' t then (tc, false)
+    else type_error s ("Subtype check failed, t:" ^ (ml_string_of_ty t) ^ " t': " ^ (ml_string_of_ty t'))
     
   | _ -> failwith "typecheck_stmt: to do"
   end 
