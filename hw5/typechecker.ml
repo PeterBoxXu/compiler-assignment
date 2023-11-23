@@ -271,7 +271,7 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     let t = typecheck_exp tc e1 in
     let t' = typecheck_exp tc e2 in
     if subtype tc t' t then (tc, false)
-    else type_error s ("Subtype check failed, t:" ^ (ml_string_of_ty t) ^ " t': " ^ (ml_string_of_ty t'))
+    else type_error s ("Subtype check failed, lhs is of type:" ^ (ml_string_of_ty t) ^ " t': " ^ (ml_string_of_ty t'))
     
   | _ -> failwith "typecheck_stmt: to do"
   end 
