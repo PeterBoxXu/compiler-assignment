@@ -183,6 +183,14 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
         let t' = typecheck_exp c' e2 in
         if (not (subtype c t' t)) then type_error e2 "typecheck_exp: exp2 is not subtype of declared list type"
         else TRef (RArray t)
+  | Index (e1, e2) -> 
+    begin match typecheck_exp c e1 with
+    | TRef (RArray t) -> 
+      let t2 = typecheck_exp c e2 in
+      if (not (t2 = TInt)) then type_error e2 "typecheck_exp: exp2 is not of type int"
+      else t
+    | _ -> type_error e1 "typecheck_exp: exp1 is not of type array"
+    end
   | CStruct (sid, given_fs) -> 
     begin match Tctxt.lookup_struct_option sid c with
     | Some (fs_ctxt) -> 
