@@ -165,7 +165,7 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
     let t = lookup_option id c in
     begin match t with
     | Some ty -> ty
-    | None -> type_error e ("typecheck_exp: " ^ id ^ "undefined")
+    | None -> type_error e ("typecheck_exp: " ^ id ^ " undefined")
     end
   | CStruct (sid, given_fs) -> 
     begin match Tctxt.lookup_struct_option sid c with
@@ -195,6 +195,19 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
       | None -> type_error e ("typecheck_exp: " ^ id ^ "not a field")
       end
     | _ -> type_error e ("typecheck_exp: " ^ "not a struct")
+    end
+  | Call (fe, es) ->
+    let fty = typecheck_exp c fe in
+    begin match fty with
+    | TRef (RFun (atys, retty)) ->
+      if (List.length atys) != (List.length es) then type_error e ("typecheck_exp: " ^ "argument number mismatch")
+      else
+        let cmp_arg_type (t : ty) (x2 : exp node) : bool =
+          let t' = typecheck_exp c x2 in
+          subtype c t' t in
+        if (not (List.for_all2 cmp_arg_type atys es)) then type_error e ("typecheck_exp: " ^ "argument type mismatch")
+        else (fun (RetVal t) -> t) retty
+    | _ -> type_error e ("typecheck_exp: " ^ "not a function")
     end
   | _ -> failwith "typecheck_exp: to do"
   end 
@@ -290,7 +303,7 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
         begin match lookup_local_option toplevel_id tc with
         | Some _ -> () (* toplevel_id is defined in local *)
         | None -> begin match lookup_global_option toplevel_id tc with
-          | None -> type_error e1 ("typecheck_stmt: " ^ toplevel_id ^ "undefined")
+          | None -> type_error e1 ("typecheck_stmt: " ^ toplevel_id ^ " undefined")
           | Some _ -> ()
           end
         end
