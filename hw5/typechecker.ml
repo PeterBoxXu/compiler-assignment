@@ -230,6 +230,14 @@ let typecheck_decl (tc: Tctxt.t) (s: Ast.vdecl) : Tctxt.t =
     let t = typecheck_exp tc e in
     Tctxt.add_local tc id t 
 
+let rec get_leftmost_id (e: Ast.exp node) : id =
+  begin match e.elt with
+  | Id id -> id
+  | Proj (e, _) -> get_leftmost_id e
+  | Index (e, _) -> get_leftmost_id e
+  | _ -> failwith "get_leftmost_id: invalid exp"
+  end
+
 (* Typecheck a statement 
    This function should implement the statement typechecking rules from oat.pdf.  
 
@@ -290,11 +298,7 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
         end
       end
     | Proj (e, _) -> 
-      let toplevel_id = 
-        begin match e.elt with
-        | Id id -> id
-        | _ -> failwith "typecheck_stmt: tried to project from non-id exp"
-        end in
+      let toplevel_id = get_leftmost_id e in
         begin match lookup_local_option toplevel_id tc with
         | Some _ -> () (* toplevel_id is defined in local. Note here we don't check if the toplevel type is really a struct. Are we hoping the struct type check will be implemented in corresponding cases in typecheck_exp? *)
         (* TODO: does Oat v2 allow modifying fields of global struct variables? *)
@@ -304,11 +308,7 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
           end
         end
     | Index (e, _) ->
-      let toplevel_id = 
-        begin match e.elt with
-        | Id id -> id
-        | _ -> failwith "typecheck_stmt: tried to index from non-id exp"
-        end in
+      let toplevel_id = get_leftmost_id e in
         begin match lookup_local_option toplevel_id tc with
         | Some _ -> () (* toplevel_id is defined in local *)
         | None -> begin match lookup_global_option toplevel_id tc with
