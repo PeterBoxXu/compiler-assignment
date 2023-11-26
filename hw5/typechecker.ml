@@ -46,7 +46,41 @@ let typ_of_unop : Ast.unop -> Ast.ty * Ast.ty = function
       relation. We have included a template for subtype_ref to get you started.
       (Don't forget about OCaml's 'and' keyword.)
 *)
-let rec subtype (c : Tctxt.t) (t1 : Ast.ty) (t2 : Ast.ty) : bool =
+let rec equals (t : Ast.ty) (t' : Ast.ty) : bool = 
+  begin match (t, t') with 
+  | (TInt, TInt) -> true
+  | (TBool, TBool) -> true
+  | (TRef rt1, TRef rt2) -> equals_ref rt1 rt2
+  | (TNullRef rt1, TNullRef rt2) -> equals_ref rt1 rt2
+  | _ -> false
+  end
+
+and equals_ref (t : Ast.rty) (t' : Ast.rty) : bool =
+  begin match (t, t') with
+  | (RString, RString) -> true
+  | (RArray t1, RArray t2) -> equals t1 t2
+  | (RStruct id1, RStruct id2) -> id1 = id2
+  | (RFun (args1, rt1), RFun (args2, rt2)) -> 
+    if (List.length args1) != (List.length args2) then false
+    else 
+      let equals_nth_arg (b:bool) (t : ty * ty) : bool =
+        let (t1, t2) = t in
+        b && (equals t2 t1) in (* argument types are contravariant! p12, lec16 *)
+      let args = List.fold_left equals_nth_arg true (List.combine args1 args2) in
+      args && (equals_return rt1 rt2)
+  | _ -> false
+  end
+
+and equals_return (t : Ast.ret_ty) (t' : Ast.ret_ty) : bool =
+  begin match (t, t') with
+  | (RetVoid, RetVoid) -> true
+  | (RetVal t1, RetVal t2) -> equals t1 t2
+  | _ -> false
+  end
+
+let rec subtype (c : Tctxt.t) (t1 : Ast.ty) (t2 : Ast.ty) : bool =  print_string ("-----\n");
+print_string ("t1 = " ^ (Astlib.ml_string_of_ty t1) ^ "\n");
+print_string ("t2 = " ^ (Astlib.ml_string_of_ty t2) ^ "\n");
   begin match (t1, t2) with
   | (TInt, TInt) -> true
   | (TBool, TBool) -> true
@@ -61,7 +95,9 @@ let rec subtype (c : Tctxt.t) (t1 : Ast.ty) (t2 : Ast.ty) : bool =
 and subtype_ref (c : Tctxt.t) (t1 : Ast.rty) (t2 : Ast.rty) : bool =
   begin match (t1, t2) with
   | (RString, RString) -> true
-  | (RArray t1, RArray t2) -> subtype c t1 t2
+  | (RArray t1, RArray t2) -> 
+    (* recursively determine if t1 is of the same type as t2. We mean strictly equal, not subtyping. *)
+    equals t1 t2
   | (RStruct id1, RStruct id2) -> 
     let fields1 = lookup_struct id1 c in
     let fields2 = lookup_struct id2 c in
@@ -336,7 +372,10 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     (* not we proceed with a valid lhs, by performing subtyping checks *)
     let t = typecheck_exp tc e1 in
     let t' = typecheck_exp tc e2 in
-    if subtype tc t' t then (tc, false)
+    print_string ("t' = " ^ (ml_string_of_ty t') ^ "\n");
+    print_string ("t = " ^ (ml_string_of_ty t) ^ "\n");
+    if subtype tc t' t then
+      (tc, false)
     else type_error s ("Subtype check failed, lhs is of type:" ^ (ml_string_of_ty t) ^ " t': " ^ (ml_string_of_ty t'))
     
   | _ -> failwith "typecheck_stmt: to do"
