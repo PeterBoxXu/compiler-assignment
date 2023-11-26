@@ -61,7 +61,7 @@ let rec subtype (c : Tctxt.t) (t1 : Ast.ty) (t2 : Ast.ty) : bool =
 and subtype_ref (c : Tctxt.t) (t1 : Ast.rty) (t2 : Ast.rty) : bool =
   begin match (t1, t2) with
   | (RString, RString) -> true
-  | (RArray t1, RArray t2) -> t1 == t2
+  | (RArray t1, RArray t2) -> subtype c t1 t2
   | (RStruct id1, RStruct id2) -> 
     let fields1 = lookup_struct id1 c in
     let fields2 = lookup_struct id2 c in
@@ -166,7 +166,16 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
     begin match t with
     | Some ty -> ty
     | None -> type_error e ("typecheck_exp: " ^ id ^ " undefined")
-    end
+    end  
+  | CArr (t, es) ->
+    (* begin match arrt with 
+    | TRef (RArray t) -> *)
+      let element_subtyping (t_i : Ast.ty) : bool = 
+        subtype c t_i t in
+      if (not (List.for_all element_subtyping (List.map (typecheck_exp c) es))) then type_error e "typecheck_exp: element type is not subtype of declared list type"
+      else TRef (RArray t)
+    (* | _ -> type_error e ("typecheck_exp: CArr type is not defined with TRef (RArray, obtained " ^ Astlib.ml_string_of_ty arrt)
+    end *)
   | CStruct (sid, given_fs) -> 
     begin match Tctxt.lookup_struct_option sid c with
     | Some (fs_ctxt) -> 
@@ -199,14 +208,14 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
   | Call (fe, es) ->
     let fty = typecheck_exp c fe in
     begin match fty with
-    | TRef (RFun (atys, retty)) ->
+    | TRef (RFun (atys, (RetVal retty))) ->
       if (List.length atys) != (List.length es) then type_error e ("typecheck_exp: " ^ "argument number mismatch")
       else
         let cmp_arg_type (t : ty) (x2 : exp node) : bool =
           let t' = typecheck_exp c x2 in
           subtype c t' t in
         if (not (List.for_all2 cmp_arg_type atys es)) then type_error e ("typecheck_exp: " ^ "argument type mismatch")
-        else (fun (RetVal t) -> t) retty
+        else retty
     | _ -> type_error e ("typecheck_exp: " ^ "not a function")
     end
   | _ -> failwith "typecheck_exp: to do"
