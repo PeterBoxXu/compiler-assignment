@@ -167,6 +167,35 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
     | Some ty -> ty
     | None -> type_error e ("typecheck_exp: " ^ id ^ "undefined")
     end
+  | CStruct (sid, given_fs) -> 
+    begin match Tctxt.lookup_struct_option sid c with
+    | Some (fs_ctxt) -> 
+      let cmp_field_id (x1 : id * 'a) (x2 : id * 'b) : int =
+        compare (fst x1) (fst x2) in
+      let given_fs_sorted = List.sort cmp_field_id (List.map (fun (x:id * exp node) : (id * Ast.ty) -> (fst x, typecheck_exp c (snd x))) given_fs) in
+      let decompose_record (f:field) : (id * Ast.ty) = (f.fieldName, f.ftyp) in
+      let ctxt_fs_sorted = List.sort cmp_field_id (List.map decompose_record fs_ctxt) in
+      
+      (* compare if the id fields of both lists equal, if not raise error *)
+      if (not (List.equal (=) (fst (List.split given_fs_sorted)) (fst (List.split ctxt_fs_sorted)) )) then type_error e ("typecheck_exp: " ^ sid ^ "field name mismatch")
+      else 
+        (* compare if the types of both lists equal, if not raise error *)
+        let cmp_field_type (x1 : id * Ast.ty) (x2 : id * Ast.ty) : bool =
+          subtype c (snd x1) (snd x2) in
+        if (not (List.for_all2 cmp_field_type given_fs_sorted ctxt_fs_sorted)) then type_error e ("typecheck_exp: " ^ sid ^ "field type mismatch")
+        else TRef (RStruct sid)
+    | None -> type_error e ("typecheck_exp: " ^ sid ^ "not a struct")
+    end
+  | Proj (e, id) ->
+    let t = typecheck_exp c e in
+    begin match t with
+    | TRef (RStruct sid) -> 
+      begin match Tctxt.lookup_field_option sid id c with
+      | Some ty -> ty
+      | None -> type_error e ("typecheck_exp: " ^ id ^ "not a field")
+      end
+    | _ -> type_error e ("typecheck_exp: " ^ "not a struct")
+    end
   | _ -> failwith "typecheck_exp: to do"
   end 
 
