@@ -168,14 +168,21 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
     | None -> type_error e ("typecheck_exp: " ^ id ^ " undefined")
     end  
   | CArr (t, es) ->
-    (* begin match arrt with 
-    | TRef (RArray t) -> *)
-      let element_subtyping (t_i : Ast.ty) : bool = 
-        subtype c t_i t in
-      if (not (List.for_all element_subtyping (List.map (typecheck_exp c) es))) then type_error e "typecheck_exp: element type is not subtype of declared list type"
-      else TRef (RArray t)
-    (* | _ -> type_error e ("typecheck_exp: CArr type is not defined with TRef (RArray, obtained " ^ Astlib.ml_string_of_ty arrt)
-    end *)
+    typecheck_ty e c t;
+    let element_subtyping (t_i : Ast.ty) : bool = 
+      subtype c t_i t in
+    if (not (List.for_all element_subtyping (List.map (typecheck_exp c) es))) then type_error e "typecheck_exp: element type is not subtype of declared list type"
+    else TRef (RArray t)
+  | NewArr (t, e1, id, e2) ->
+    typecheck_ty e c t;
+    if (not ((typecheck_exp c e1) = TInt)) then type_error e1 "typecheck_exp: exp1 is not of type int"
+    else 
+      if (Tctxt.lookup_local_option id c) != None then type_error e2 "typecheck_exp: id already defined"
+      else 
+        let c' = Tctxt.add_local c id TInt in
+        let t' = typecheck_exp c' e2 in
+        if (not (subtype c t' t)) then type_error e2 "typecheck_exp: exp2 is not subtype of declared list type"
+        else TRef (RArray t)
   | CStruct (sid, given_fs) -> 
     begin match Tctxt.lookup_struct_option sid c with
     | Some (fs_ctxt) -> 
