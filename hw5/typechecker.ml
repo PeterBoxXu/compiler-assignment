@@ -437,9 +437,22 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
         else (tc, false)
     | _ -> type_error s ("typecheck_stmt: function does not return void")
     end
+  | If (e, s1, s2) ->
+    let t = typecheck_exp tc e in
+    if (not (t = TBool)) then type_error e "typecheck_stmt: if condition is not of type bool"
+    else 
+      let b1 = typecheck_if_block tc s1 to_ret in
+      let b2 = typecheck_if_block tc s2 to_ret in
+      (tc, b1 && b2)
   | _ -> failwith "typecheck_stmt: to do"
   end 
 
+and typecheck_if_block (tc: Tctxt.t) (ss: Ast.stmt node list) (to_ret: ret_ty) : bool =
+  let typecheck_if_block_stmt (base: Tctxt.t * bool) (s: Ast.stmt node)  : Tctxt.t * bool = 
+    let (tc', b') = typecheck_stmt (fst base) s to_ret in
+    (tc', (snd base) || b') in
+  let (_, b') = List.fold_left typecheck_if_block_stmt (tc, false) ss in
+  b'
 
 (* struct type declarations ------------------------------------------------- *)
 (* Here is an example of how to implement the TYP_TDECLOK rule, which is 
