@@ -438,14 +438,25 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
         else (tc, false)
     | _ -> type_error s ("typecheck_stmt: function does not return void")
     end
-  | If (e, s1, s2) ->
+  | If (e, blk1, blk2) ->
     let t = typecheck_exp tc e in
     if (not (t = TBool)) then type_error e "typecheck_stmt: if condition is not of type bool"
     else 
-      let b1 = typecheck_sub_block tc s1 to_ret in
-      let b2 = typecheck_sub_block tc s2 to_ret in
+      let b1 = typecheck_sub_block tc blk1 to_ret in
+      let b2 = typecheck_sub_block tc blk2 to_ret in
       (tc, b1 && b2)
-  | Cast _ -> failwith "typecheck_stmt: todo Cast"
+  | Cast (rt, id, e, blk1, blk2) -> 
+    let te = typecheck_exp tc e in
+    begin match te with
+      | TNullRef rt' -> 
+        if (not (subtype_ref tc rt' rt)) then type_error e "typecheck_stmt: cast type mismatch"
+        else
+          let tc' = Tctxt.add_local tc id (TRef rt) in
+          let b1 = typecheck_sub_block tc' blk1 to_ret in
+          let b2 = typecheck_sub_block tc blk2 to_ret in
+          (tc, b1 && b2)
+      | _ -> type_error e "typecheck_stmt: cast expression is not a possibly-null reference"
+    end
   | For (vds, e, header_s, ss) -> 
     let tc' = List.fold_left typecheck_decl tc vds in
     begin match e with
@@ -466,7 +477,6 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     else 
       let _ = typecheck_sub_block tc ss to_ret in
       (tc, false)
-  | _ -> failwith "typecheck_stmt: to do"
   end 
 
 and typecheck_sub_block (tc: Tctxt.t) (ss: Ast.stmt node list) (to_ret: ret_ty) : bool =
