@@ -186,6 +186,43 @@ and typecheck_return (l : 'a Ast.node) (tc : Tctxt.t) (t : Ast.ret_ty) : unit =
    a=1} is well typed.  (You should sort the fields to compare them.)
 
 *)
+
+let typecheck_bop (c : Tctxt.t) (bop : Ast.binop) (t1 : Ast.ty) (t2 : Ast.ty) : Ast.ty =
+  begin match (t1, t2) with
+  | (TInt, TInt) ->
+    begin match bop with 
+    | Add 
+    | Mul
+    | Sub 
+    | Shl
+    | Shr
+    | Sar
+    | IAnd
+    | IOr
+    -> TInt
+    | Eq
+    | Neq
+    (* The above two are not mentioned in Oat v2 spec *)
+    | Lt
+    | Lte
+    | Gt
+    | Gte
+    -> TBool
+    | _ -> type_error (no_loc bop) "typecheck_bop: non-int bops applied on int arguments"
+   end 
+  | (TBool, TBool) -> 
+    begin match bop with
+    | Eq
+    | Neq
+    (* The above two are not mentioned in Oat v2 spec *)
+    | And 
+    | Or
+    -> TBool
+    | _ -> type_error (no_loc bop) "typecheck_bop: non-boolean bops applied on boolean arguments"
+    end
+  | _ -> type_error (no_loc bop) "typecheck_bop: illegal argument types"
+  end
+
 let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
   begin match e.elt with
   | CNull rty -> typecheck_ty e c (TRef rty); TNullRef rty
@@ -269,6 +306,10 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
         else retty
     | _ -> type_error e ("typecheck_exp: " ^ "not a function")
     end
+  | Bop (bop, e1, e2) -> 
+    let t1 = typecheck_exp c e1 in
+    let t2 = typecheck_exp c e2 in
+    typecheck_bop c bop t1 t2
   | _ -> failwith "typecheck_exp: to do"
   end 
 
