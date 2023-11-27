@@ -451,15 +451,21 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     begin match e with
     | None -> ()
     | Some e -> let t = typecheck_exp tc' e in
-      if (not (t = TBool)) then type_error s "typecheck_stmt: for condition is not of type bool"
+      if (not (t = TBool)) then type_error e "typecheck_stmt: for condition is not of type bool"
     end;
     begin match header_s with
     | None -> ()
     | Some s' -> let (_, return) = typecheck_stmt tc' s' to_ret in
-      if return then type_error s "typecheck_stmt: for header statement returns"
+      if return then type_error s' "typecheck_stmt: for header statement returns"
     end;
     let _ = typecheck_sub_block tc' ss to_ret in
     (tc, false)
+  | While (e, ss) ->
+    let t = typecheck_exp tc e in
+    if (not (t = TBool)) then type_error e "typecheck_stmt: while condition is not of type bool"
+    else 
+      let _ = typecheck_sub_block tc ss to_ret in
+      (tc, false)
   | _ -> failwith "typecheck_stmt: to do"
   end 
 
