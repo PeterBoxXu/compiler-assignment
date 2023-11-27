@@ -302,7 +302,9 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
         else retty
     | _ -> type_error e ("typecheck_exp: " ^ "not a function")
     end
-  | Bop (Eq, e1, e2) -> 
+  | Bop (Eq, e1, e2)
+  | Bop (Neq, e1, e2) 
+    -> 
     let t1 = typecheck_exp c e1 in
     let t2 = typecheck_exp c e2 in
     if ((subtype c t1 t2) && (subtype c t2 t1)) then TBool
