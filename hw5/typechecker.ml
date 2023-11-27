@@ -187,7 +187,7 @@ and typecheck_return (l : 'a Ast.node) (tc : Tctxt.t) (t : Ast.ret_ty) : unit =
 
 *)
 
-let typecheck_bop (c : Tctxt.t) (bop : Ast.binop) (t1 : Ast.ty) (t2 : Ast.ty) : Ast.ty =
+let typecheck_bop (bop : Ast.binop) (t1 : Ast.ty) (t2 : Ast.ty) : Ast.ty =
   begin match (t1, t2) with
   | (TInt, TInt) ->
     begin match bop with 
@@ -215,6 +215,13 @@ let typecheck_bop (c : Tctxt.t) (bop : Ast.binop) (t1 : Ast.ty) (t2 : Ast.ty) : 
     | _ -> type_error (no_loc bop) "typecheck_bop: non-boolean bops applied on boolean arguments"
     end
   | _ -> type_error (no_loc bop) "typecheck_bop: illegal argument types"
+  end
+
+let typecheck_uop (uop : Ast.unop) : Ast.ty = 
+  begin match uop with
+  | Neg
+  | Bitnot -> TInt
+  | Lognot -> TBool
   end
 
 let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
@@ -312,8 +319,12 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
   | Bop (bop, e1, e2) -> 
     let t1 = typecheck_exp c e1 in
     let t2 = typecheck_exp c e2 in
-    typecheck_bop c bop t1 t2
-  | _ -> failwith "typecheck_exp: to do"
+    typecheck_bop bop t1 t2
+  | Uop (uop, e) ->
+    let ut = typecheck_uop uop in
+    let t = typecheck_exp c e in
+    if (subtype c t ut) then ut (* Q: Is it safe to use subtyping as a substitution for type equality here? *)
+    else type_error e ("typecheck_exp: " ^ "type mismatch")
   end 
 
 (* statements --------------------------------------------------------------- *)
