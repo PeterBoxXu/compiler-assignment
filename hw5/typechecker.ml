@@ -410,7 +410,21 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     if subtype tc t' t then
       (tc, false)
     else type_error s ("Subtype check failed, lhs is of type:" ^ (ml_string_of_ty t) ^ " t': " ^ (ml_string_of_ty t'))
-    
+  | SCall (e0, es) ->
+    let t = typecheck_exp tc e0 in
+    begin match t with
+    | TRef (RFun (atys, (RetVoid)))
+    | TNullRef (RFun (atys, (RetVoid)))
+    -> 
+      if (List.length atys) != (List.length es) then type_error s ("typecheck_stmt: " ^ "argument number mismatch")
+      else
+        let cmp_arg_type (t : ty) (x2 : exp node) : bool =
+          let t' = typecheck_exp tc x2 in
+          subtype tc t' t in
+        if (not (List.for_all2 cmp_arg_type atys es)) then type_error s ("typecheck_stmt: " ^ "argument type mismatch")
+        else (tc, false)
+    | _ -> type_error s ("typecheck_stmt: function does not return void")
+    end
   | _ -> failwith "typecheck_stmt: to do"
   end 
 
