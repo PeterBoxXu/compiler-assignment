@@ -222,6 +222,11 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
       else t
     | _ -> type_error e1 "typecheck_exp: exp1 is not of type array"
     end
+  | Length e ->
+    begin match typecheck_exp c e with
+    | TRef (RArray _) -> TInt
+    | _ -> type_error e "typecheck_exp: exp is not of type array"
+    end
   | CStruct (sid, given_fs) -> 
     begin match Tctxt.lookup_struct_option sid c with
     | Some (fs_ctxt) -> 
@@ -343,20 +348,12 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
           end
         end
       end
-    | Proj (e, _) -> 
-      let toplevel_id = get_leftmost_id e in
-        begin match lookup_local_option toplevel_id tc with
-        | Some _ -> () (* toplevel_id is defined in local. Note here we don't check if the toplevel type is really a struct. Are we hoping the struct type check will be implemented in corresponding cases in typecheck_exp? *)
-        (* TODO: does Oat v2 allow modifying fields of global struct variables? *)
-        | None -> begin match lookup_global_option toplevel_id tc with
-          | None -> type_error e1 ("typecheck_stmt: " ^ toplevel_id ^ "undefined")
-          | Some _ -> ()
-          end
-        end
+    | Proj (e, _) 
     | Index (e, _) ->
       let toplevel_id = get_leftmost_id e in
         begin match lookup_local_option toplevel_id tc with
-        | Some _ -> () (* toplevel_id is defined in local *)
+        | Some _ -> () (* toplevel_id is defined in local. Note here we don't check if the toplevel type is really a struct or array. Are we hoping the struct type check will be implemented in corresponding cases in typecheck_exp? *)
+          (* TODO: does Oat v2 allow modifying fields of global struct variables? *)
         | None -> begin match lookup_global_option toplevel_id tc with
           | None -> type_error e1 ("typecheck_stmt: " ^ toplevel_id ^ " undefined")
           | Some _ -> ()
