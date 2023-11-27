@@ -441,17 +441,32 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     let t = typecheck_exp tc e in
     if (not (t = TBool)) then type_error e "typecheck_stmt: if condition is not of type bool"
     else 
-      let b1 = typecheck_if_block tc s1 to_ret in
-      let b2 = typecheck_if_block tc s2 to_ret in
+      let b1 = typecheck_sub_block tc s1 to_ret in
+      let b2 = typecheck_sub_block tc s2 to_ret in
       (tc, b1 && b2)
+  | Cast _ -> failwith "typecheck_stmt: todo Cast"
+  | For (vds, e, header_s, ss) -> 
+    let tc' = List.fold_left typecheck_decl tc vds in
+    begin match e with
+    | None -> ()
+    | Some e -> let t = typecheck_exp tc' e in
+      if (not (t = TBool)) then type_error s "typecheck_stmt: for condition is not of type bool"
+    end;
+    begin match header_s with
+    | None -> ()
+    | Some s' -> let (_, return) = typecheck_stmt tc' s' to_ret in
+      if return then type_error s "typecheck_stmt: for header statement returns"
+    end;
+    let _ = typecheck_sub_block tc' ss to_ret in
+    (tc, false)
   | _ -> failwith "typecheck_stmt: to do"
   end 
 
-and typecheck_if_block (tc: Tctxt.t) (ss: Ast.stmt node list) (to_ret: ret_ty) : bool =
-  let typecheck_if_block_stmt (base: Tctxt.t * bool) (s: Ast.stmt node)  : Tctxt.t * bool = 
+and typecheck_sub_block (tc: Tctxt.t) (ss: Ast.stmt node list) (to_ret: ret_ty) : bool =
+  let typecheck_sub_block_stmt (base: Tctxt.t * bool) (s: Ast.stmt node)  : Tctxt.t * bool = 
     let (tc', b') = typecheck_stmt (fst base) s to_ret in
     (tc', (snd base) || b') in
-  let (_, b') = List.fold_left typecheck_if_block_stmt (tc, false) ss in
+  let (_, b') = List.fold_left typecheck_sub_block_stmt (tc, false) ss in
   b'
 
 (* struct type declarations ------------------------------------------------- *)
