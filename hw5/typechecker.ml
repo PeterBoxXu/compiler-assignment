@@ -509,6 +509,7 @@ let create_struct_ctxt (p:Ast.prog) : Tctxt.t =
   List.fold_left add_decl Tctxt.empty p 
 
 let create_function_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
+  let c_with_builtin = List.fold_left (fun tc (id, (args, retty)) : Tctxt.t -> add_global tc id (TRef (RFun (args, retty)))) tc builtins in
   let add_decl (tc: Tctxt.t) (d: Ast.decl) : Tctxt.t =
     begin match d with
     | Gfdecl ({elt=f} as l) -> 
@@ -519,7 +520,7 @@ let create_function_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
         add_global tc f.fname (TRef (RFun (ids, f.frtyp)))
     | _ -> tc
     end in
-  List.fold_left add_decl tc p
+  List.fold_left add_decl c_with_builtin p
 
 let create_global_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
   let rec contains_global (c: Tctxt.t) (e: exp node) : bool =
