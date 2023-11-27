@@ -200,9 +200,6 @@ let typecheck_bop (c : Tctxt.t) (bop : Ast.binop) (t1 : Ast.ty) (t2 : Ast.ty) : 
     | IAnd
     | IOr
     -> TInt
-    | Eq
-    | Neq
-    (* The above two are not mentioned in Oat v2 spec *)
     | Lt
     | Lte
     | Gt
@@ -212,9 +209,6 @@ let typecheck_bop (c : Tctxt.t) (bop : Ast.binop) (t1 : Ast.ty) (t2 : Ast.ty) : 
    end 
   | (TBool, TBool) -> 
     begin match bop with
-    | Eq
-    | Neq
-    (* The above two are not mentioned in Oat v2 spec *)
     | And 
     | Or
     -> TBool
@@ -308,6 +302,11 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
         else retty
     | _ -> type_error e ("typecheck_exp: " ^ "not a function")
     end
+  | Bop (Eq, e1, e2) -> 
+    let t1 = typecheck_exp c e1 in
+    let t2 = typecheck_exp c e2 in
+    if ((subtype c t1 t2) && (subtype c t2 t1)) then TBool
+    else type_error e ("typecheck_exp: " ^ "type mismatch")
   | Bop (bop, e1, e2) -> 
     let t1 = typecheck_exp c e1 in
     let t2 = typecheck_exp c e2 in
