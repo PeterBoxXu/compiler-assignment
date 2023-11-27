@@ -296,7 +296,9 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
   | Call (fe, es) ->
     let fty = typecheck_exp c fe in
     begin match fty with
-    | TRef (RFun (atys, (RetVal retty))) ->
+    | TRef (RFun (atys, (RetVal retty)))
+    | TNullRef (RFun (atys, (RetVal retty)))
+     ->
       if (List.length atys) != (List.length es) then type_error e ("typecheck_exp: " ^ "argument number mismatch")
       else
         let cmp_arg_type (t : ty) (x2 : exp node) : bool =
@@ -520,18 +522,18 @@ let create_function_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
   List.fold_left add_decl tc p
 
 let create_global_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
-  let rec contains_global (e: exp node) : bool =
+  let rec contains_global (c: Tctxt.t) (e: exp node) : bool =
     begin match e.elt with
     | CNull _ | CBool _ | CInt _ | CStr _ -> false
     | Id id -> 
-      let ty = lookup_global_option id tc in
+      let ty = lookup_global_option id c in
       begin match ty with
       | Some (TRef (RFun _)) -> false
       | None -> false
       | _ -> true
       end
-    | CArr (_, es) -> List.exists contains_global es
-    | CStruct (_, fs) -> List.exists (fun (_, e) -> contains_global e) fs
+    | CArr (_, es) -> List.exists (contains_global c) es
+    | CStruct (_, fs) -> List.exists (fun (_, e) -> contains_global c e) fs
     | _ -> failwith "contains_global: invalid exp"
     end
   in
@@ -540,9 +542,14 @@ let create_global_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
     | Gvdecl ({elt={name; init}} as l) ->
       if (List.mem_assoc name tc.globals) then type_error l ("Duplicate global " ^ name)
       else 
-        if contains_global init then type_error l ("Global initializer contains global" ^ name)
+        if contains_global tc init then type_error l ("Global initializer contains global" ^ name)
         else 
-          let ty = typecheck_exp tc init in
+          let ty = 
+            begin match typecheck_exp tc init with
+            | TRef (RFun (args, retty)) -> TNullRef (RFun (args, retty))
+            | t -> t
+            end
+            in
           add_global tc name ty
     | _ -> tc
     end in

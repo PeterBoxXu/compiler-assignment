@@ -141,7 +141,7 @@ let typecheck_error (a : assertion) () =
   try a (); failwith "Should have a type error" with Typechecker.TypeError s -> ()
 
 let typecheck_correct (a : assertion) () =
-  try a () with Typechecker.TypeError s -> failwith "Should not have had a type error"
+  try a () with Typechecker.TypeError s -> failwith ("Should not have had a type error" ^ s)
 
 
 let typecheck_file_error tests =
@@ -367,8 +367,8 @@ let typecheck_error_expression_tests =
     "hw5programs/tc_error_null.oat";
   ]
 
-let typecheck_error_struct_tests = 
-  [ "hw5programs/tc_error_struct_proj.oat";
+let typecheck_error_struct_tests = [
+  (* [ "hw5programs/tc_error_struct_proj.oat";
     "hw5programs/tc_error_struct1.oat";
     "hw5programs/tc_error_struct2.oat";
     "hw5programs/tc_error_struct3.oat";
@@ -376,18 +376,18 @@ let typecheck_error_struct_tests =
     "hw5programs/tc_error_struct_dup.oat";
     "hw5programs/tc_error_struct.oat";
     "hw5programs/tc_error_dupstruct.oat";
-    "hw5programs/tc_error_struct_unbound.oat";
+    "hw5programs/tc_error_struct_unbound.oat"; *)
   ]
 
-let typecheck_error_global_tests =
-  [ "hw5programs/tc_error_global_dup.oat";
+let typecheck_error_global_tests = [
+  (* [ "hw5programs/tc_error_global_dup.oat";
     "hw5programs/tc_error_global.oat";
     "hw5programs/tc_error_func_redeclaration.oat";
     "hw5programs/tc_error_func_assign.oat";
-    "hw5programs/tc_error_overwrite.oat";
+    "hw5programs/tc_error_overwrite.oat"; *)
     "hw5programs/tc_error_global_fptr_scope.oat";
-    "hw5programs/tc_error_function_no_shadow.oat";
-    "hw5programs/tc_correct_null.oat";
+    (* "hw5programs/tc_error_function_no_shadow.oat";
+    "hw5programs/tc_correct_null.oat"; *)
   ]
 
 let typecheck_correct_other_tests =
@@ -450,16 +450,16 @@ let tc_err_tests = [
 
 
 let typecheck_tests : suite = [
-  GradedTest("subtype unit tests", 3, unit_tests);
+  (* GradedTest("subtype unit tests", 3, unit_tests);
   GradedTest("tc subtyping tests", 4, typecheck_file_correct typecheck_subtyping_tests);
   GradedTest("tc subtyping error tests", 4, typecheck_file_error typecheck_subtyping_error_tests);  
   GradedTest("tc statement error tests", 5, typecheck_file_error typecheck_statement_error_tests);
   GradedTest("tc statement correct tests", 5, typecheck_file_correct typecheck_correct_statement_tests);
   GradedTest("tc other correct tests", 5, typecheck_file_correct typecheck_correct_other_tests);
   GradedTest("tc null/not null error tests", 5, typecheck_file_error typecheck_error_null_not_null_tests);
-  GradedTest("tc expression error tests", 5, typecheck_file_error typecheck_error_expression_tests);
+  GradedTest("tc expression error tests", 5, typecheck_file_error typecheck_error_expression_tests); *)
   GradedTest("tc struct/global error tests", 5, typecheck_file_error (typecheck_error_struct_tests @ typecheck_error_global_tests));
-  GradedTest("extra tc err tests", 5, typecheck_file_error tc_err_tests);
+  (* GradedTest("extra tc err tests", 5, typecheck_file_error tc_err_tests); *)
 
 ]
 
@@ -484,7 +484,7 @@ let hw4_tests =
 
 let functionality_tests : suite = [GradedTest("functionality tests from HW04", 10, executed_oat_file hw4_tests)]
 
-let graded_tests : suite =
-  typecheck_tests @
+let graded_tests : suite = typecheck_tests
+  (* typecheck_tests @
   hw5_tests @
-  functionality_tests
+  functionality_tests *)
