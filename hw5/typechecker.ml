@@ -341,6 +341,7 @@ let rec get_leftmost_id (e: Ast.exp node) : id =
   | Id id -> id
   | Proj (e, _) -> get_leftmost_id e
   | Index (e, _) -> get_leftmost_id e
+  | Call (e, _) -> get_leftmost_id e
   | _ -> failwith "get_leftmost_id: invalid exp"
   end
 
