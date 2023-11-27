@@ -298,7 +298,6 @@ let rec typecheck_exp (c : Tctxt.t) (e : Ast.exp node) : Ast.ty =
     let fty = typecheck_exp c fe in
     begin match fty with
     | TRef (RFun (atys, (RetVal retty)))
-    | TNullRef (RFun (atys, (RetVal retty)))
      ->
       if (List.length atys) != (List.length es) then type_error e ("typecheck_exp: " ^ "argument number mismatch")
       else
@@ -427,7 +426,6 @@ let rec typecheck_stmt (tc : Tctxt.t) (s:Ast.stmt node) (to_ret:ret_ty) : Tctxt.
     let t = typecheck_exp tc e0 in
     begin match t with
     | TRef (RFun (atys, (RetVoid)))
-    | TNullRef (RFun (atys, (RetVoid)))
     -> 
       if (List.length atys) != (List.length es) then type_error s ("typecheck_stmt: " ^ "argument number mismatch")
       else
@@ -593,39 +591,47 @@ let create_function_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
     end in
   List.fold_left add_decl c_with_builtin p
 
+(* As for build global context for variables, we must not rush by adding every variable into context immediately after it is encountered. Instead, we need to maintain a dictionary of all previously-seen global variables, that needs to be searched against when a new global declaration is encountered. This is because global variables are forbidden to be declared using other global variables. Only when a global variable that is declared independently that is allowed to be added to context, as well as to the record for future reference. *)
+
+let empty (_: Ast.id) : Ast.ty option = None
+
+let lookup_dict (d: Ast.id -> Ast.ty option) (id: Ast.id) : Ast.ty option =
+  d id
+
+let add_to_dict (d: Ast.id -> Ast.ty option) (id: Ast.id) (ty: Ast.ty) : Ast.id -> Ast.ty option =
+  fun id' -> if id' = id then Some ty else d id'
+
 let create_global_ctxt (tc:Tctxt.t) (p:Ast.prog) : Tctxt.t =
-  let rec contains_global (c: Tctxt.t) (e: exp node) : bool =
+  let rec contains_global (d: Ast.id -> Ast.ty option) (e: exp node) : bool =
     begin match e.elt with
     | CNull _ | CBool _ | CInt _ | CStr _ -> false
     | Id id -> 
-      let ty = lookup_global_option id c in
+      let ty = lookup_dict d id in
       begin match ty with
-      | Some (TRef (RFun _)) -> false
+      | Some (_) -> true
       | None -> false
-      | _ -> true
       end
-    | CArr (_, es) -> List.exists (contains_global c) es
-    | CStruct (_, fs) -> List.exists (fun (_, e) -> contains_global c e) fs
+    | CArr (_, es) -> List.exists (contains_global d) es
+    | CStruct (_, fs) -> List.exists (fun (_, e) -> contains_global d e) fs
     | _ -> failwith "contains_global: invalid exp"
     end
   in
-  let add_decl (tc: Tctxt.t) (d: Ast.decl) : Tctxt.t =
-    begin match d with
+  let add_decl (base: Tctxt.t * (Ast.id -> Ast.ty option)) (dcl: Ast.decl) : Tctxt.t * (Ast.id -> Ast.ty option) =
+    let (tc, d) = base in
+    begin match dcl with
     | Gvdecl ({elt={name; init}} as l) ->
       if (List.mem_assoc name tc.globals) then type_error l ("Duplicate global " ^ name)
       else 
-        if contains_global tc init then type_error l ("Global initializer contains global" ^ name)
+        if contains_global d init then type_error l ("Global initializer contains global" ^ name)
         else 
-          let ty = 
-            begin match typecheck_exp tc init with
-            | TRef (RFun (args, retty)) -> TNullRef (RFun (args, retty))
-            | t -> t
-            end
-            in
-          add_global tc name ty
-    | _ -> tc
+          let ty = typecheck_exp tc init in
+          let tc' = add_global tc name ty in
+          let d' = add_to_dict d name ty in
+          (tc', d')
+    | _ -> (tc, d)
     end in
-  List.fold_left add_decl tc p
+  let (tc', _) = List.fold_left add_decl (tc, empty) p in 
+  tc'
 
 
 (* This function implements the |- prog and the H ; G |- prog 
