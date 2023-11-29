@@ -276,7 +276,16 @@ let rec cmp_exp (tc : TypeCtxt.t) (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.ope
        of the array struct representation.
   *)
   | Ast.Length e ->
-    failwith "todo:implement Ast.Length case"
+    let ans_id = gensym "len" in
+    let arr_ty, arr_op, arr_code = cmp_exp tc c e in
+    let ans_ty = begin match arr_ty with 
+      | Ptr (Struct [_; Array (_,t)]) -> t 
+      | _ -> failwith "Length: indexed into non pointer" 
+    end in
+    let ptr_id, tmp_id = gensym "index_ptr", gensym "tmp" in
+    ans_ty, Id ans_id, arr_code >@ lift
+      [ ptr_id, Gep(arr_ty, arr_op, [Const 0L; Const 0L])
+      ; ans_id, Load(I64, Id ptr_id) ]
 
   | Ast.Index (e, i) ->
     let ans_ty, ptr_op, code = cmp_exp_lhs tc c exp in
@@ -313,7 +322,29 @@ let rec cmp_exp (tc : TypeCtxt.t) (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.ope
   | Ast.NewArr (elt_ty, e1, id, e2) ->    
     let _, size_op, size_code = cmp_exp tc c e1 in
     let arr_ty, arr_op, alloc_code = oat_alloc_array tc elt_ty size_op in
-    arr_ty, arr_op, size_code >@ alloc_code
+
+    let ptr_id = gensym "ptr" in
+    let bound_id = gensym "bound" in
+    let tmp_ctxt = Ctxt.add c bound_id (Ptr I64, Id bound_id) in
+    let new_ctxt = Ctxt.add tmp_ctxt ptr_id (Ptr arr_ty, Id ptr_id) in
+
+    let init = [id, no_loc (CInt 0L)] in
+    let guard = Some (no_loc (Bop (Lt, no_loc (Id id), no_loc (Id bound_id)))) in
+    let after = Some (no_loc (Assn (no_loc (Id id), no_loc (Bop (Add, no_loc(Id id), no_loc (CInt 1L)))))) in
+    let body = [no_loc (Assn (no_loc (Index (no_loc (Id ptr_id), no_loc (Id id))), e2))] in
+    let for_loop = no_loc (For (init, guard, after, body)) in
+    
+    let for_loop_code = snd @@ cmp_stmt tc new_ctxt Void for_loop in
+    let auxillary_code = lift 
+    [ bound_id, Alloca(I64)
+    ; gensym "store", Store(I64, size_op, Id bound_id) 
+    ; ptr_id, Alloca(arr_ty)
+    ; gensym "store", Store(arr_ty, arr_op, Id ptr_id)] in
+
+    
+    arr_ty, arr_op, size_code >@ alloc_code 
+    >@ auxillary_code 
+    >@ for_loop_code
 
    (* STRUCT TASK: complete this code that compiles struct expressions.
       For each field component of the struct
