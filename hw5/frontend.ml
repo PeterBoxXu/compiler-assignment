@@ -423,9 +423,12 @@ and cmp_exp_lhs (tc : TypeCtxt.t) (c:Ctxt.t) (e:exp node) : Ll.ty * Ll.operand *
       | Ptr (Struct [_; Array (_,t)]) -> t 
       | _ -> failwith "Index: indexed into non pointer" in
     let ptr_id, tmp_id = gensym "index_ptr", gensym "tmp" in
+    let call_id = gensym "call" in
     ans_ty, (Id ptr_id),
     arr_code >@ ind_code >@ lift
-      [ptr_id, Gep(arr_ty, arr_op, [i64_op_of_int 0; i64_op_of_int 1; ind_op]) ]
+      [ tmp_id, Bitcast(arr_ty, arr_op, Ptr I64)
+      ; call_id, Call(Void, Gid "oat_assert_array_length", [Ptr I64, Id tmp_id; I64, ind_op;])
+      ; ptr_id, Gep(arr_ty, arr_op, [i64_op_of_int 0; i64_op_of_int 1; ind_op]) ]
 
    
 
@@ -672,10 +675,12 @@ let rec cmp_gexp c (tc : TypeCtxt.t) (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.
 
   (* STRUCT TASK: Complete this code that generates the global initializers for a struct value. *)  
   | CStruct (id, cs) ->
+    let fields = TypeCtxt.lookup id tc in
     let elts, gs = List.fold_right
-    (fun cst (elts, gs) ->
-       let gd, gs' = cmp_gexp c tc cst in
-       gd::elts, gs' @ gs) (List.map snd cs) ([], [])
+        (fun field (elts, gs) ->
+          let (correspond_id, correspond_e) = List.find  (fun (id, _) -> id = field.fieldName) cs in
+          let gd, gs' = cmp_gexp c tc correspond_e in
+           gd::elts, gs' @ gs) fields ([], [])
     in
     let gid = gensym "global_struct" in
     let struct_t = Namedt id in
