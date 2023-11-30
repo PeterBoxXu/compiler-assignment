@@ -498,7 +498,25 @@ and cmp_stmt (tc : TypeCtxt.t) (c:Ctxt.t) (rt:Ll.ty) (stmt:Ast.stmt node) : Ctxt
          merge label after either block
   *)
   | Ast.Cast (typ, id, exp, notnull, null) ->
-    failwith "todo: implement Ast.Cast case"
+    let as_type = cmp_ty tc (TRef typ) in
+    let exp_op, exp_stream = cmp_exp_as tc c exp as_type in
+    let null_stream = cmp_block tc c rt null in
+    let assn = Ast.Decl (id, exp) in
+    let c', assn_stream = cmp_stmt tc c Void (no_loc assn) in
+    let notnull_stream =
+      assn_stream >@
+      cmp_block tc c' rt notnull 
+    in
+    let lnull, lnotnull, lmerge = gensym "null", gensym "notnull", gensym "merge" in
+    let cnd_id = gensym "cnd" in
+    c, exp_stream
+       >:: I(cnd_id, Icmp (Eq, as_type, exp_op, Null))
+       >:: T(Cbr (Id cnd_id, lnull, lnotnull))
+       >:: L lnull >@ null_stream >:: T(Br lmerge)
+       >:: L lnotnull >@ notnull_stream >:: T(Br lmerge)
+       >:: L lmerge
+
+    (* failwith" TODO: Ast.Cast" *)
 
   | Ast.While (guard, body) ->
      let guard_ty, guard_op, guard_code = cmp_exp tc c guard in
@@ -654,8 +672,15 @@ let rec cmp_gexp c (tc : TypeCtxt.t) (e:Ast.exp node) : Ll.gdecl * (Ll.gid * Ll.
 
   (* STRUCT TASK: Complete this code that generates the global initializers for a struct value. *)  
   | CStruct (id, cs) ->
-    failwith "todo: Cstruct case of cmp_gexp"
-
+    let elts, gs = List.fold_right
+    (fun cst (elts, gs) ->
+       let gd, gs' = cmp_gexp c tc cst in
+       gd::elts, gs' @ gs) (List.map snd cs) ([], [])
+    in
+    let gid = gensym "global_struct" in
+    let struct_t = Namedt id in
+    let struct_i = GStruct elts in
+    (Ptr struct_t, GGid gid), (gid, (struct_t, struct_i))::gs
   | _ -> failwith "bad global initializer"
 
 (* Oat internals function context ------------------------------------------- *)
