@@ -302,7 +302,7 @@ let rec cmp_exp (tc : TypeCtxt.t) (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.ope
     let ptr_id, tmp_id = gensym "index_ptr", gensym "tmp" in
     ans_ty, Id ans_id, arr_code >@ lift
       [ ptr_id, Gep(arr_ty, arr_op, [Const 0L; Const 0L])
-      ; ans_id, Load(I64, Id ptr_id) ]
+      ; ans_id, Load(Ptr I64, Id ptr_id) ]
 
   | Ast.Index (e, i) ->
     let ans_ty, ptr_op, code = cmp_exp_lhs tc c exp in
