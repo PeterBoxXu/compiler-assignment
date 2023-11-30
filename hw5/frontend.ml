@@ -171,7 +171,8 @@ let gensym : string -> string =
    Oat values take 8 bytes on the stack.
 *)
 let size_oat_ty (t : Ast.ty) = 8L
-
+let tc_to_tdecls c =
+  List.map (fun (i, l) -> i, Struct (List.map (fun f -> cmp_ty c f.ftyp) l)) c
 
 
 
@@ -195,8 +196,24 @@ let oat_alloc_array ct (t:Ast.ty) (size:Ll.operand) : Ll.ty * operand * stream =
 
    - make sure to calculate the correct amount of space to allocate!
 *)
+let calc_struct_size (c : TypeCtxt.t) (id : Ast.id) : int =
+  let fields = TypeCtxt.lookup id c in
+  let rec calc_struct_size_aux l acc =
+    match l with
+    | [] -> acc
+    | h :: t -> calc_struct_size_aux t (acc + (Int64.to_int (size_oat_ty h.ftyp))) in
+  calc_struct_size_aux fields 0
+
+
 let oat_alloc_struct ct (id:Ast.id) : Ll.ty * operand * stream =
-  failwith "TODO: oat_alloc_struct"
+  let ans_id, struct_id = gensym "struct", gensym "raw_struct" in
+  let ans_ty = cmp_ty ct @@ TRef (RStruct id) in
+  let struct_ty = Ptr I64 in
+  let size = calc_struct_size ct id in
+  ans_ty, Id ans_id, lift
+    [ struct_id, Call(struct_ty, Gid "oat_malloc", [I64, Const (Int64.of_int size)])
+    ; ans_id, Bitcast(struct_ty, Id struct_id, ans_ty)]
+  (* failwith "TODO: oat_alloc_struct" *)
 
 
 let str_arr_ty s = Array(1 + String.length s, I8)
@@ -353,7 +370,17 @@ let rec cmp_exp (tc : TypeCtxt.t) (c:Ctxt.t) (exp:Ast.exp node) : Ll.ty * Ll.ope
        - store the resulting value into the structure
    *)
   | Ast.CStruct (id, l) ->
-    failwith "TODO: Ast.CStruct"
+    let ans_ty, ans_op, alloc_stream = oat_alloc_struct tc id in
+    let build_stream (base: stream) (elem: id * exp node) : stream =
+      let field_ty, field_ind = TypeCtxt.lookup_field_name id (fst elem) tc in
+      let field_op, field_code = cmp_exp_as tc c (snd elem) (cmp_ty tc field_ty) in
+      let field_ptr_id = gensym "field_ptr" in
+      base >@ field_code >@ lift
+        [ field_ptr_id, Gep(ans_ty, ans_op, [Const 0L; Const field_ind])
+        ; gensym "store", Store(cmp_ty tc field_ty, field_op, Id field_ptr_id) ]
+    in
+    ans_ty, ans_op, List.fold_left build_stream alloc_stream l
+    (* failwith "TODO: Ast.CStruct" *)
 
   | Ast.Proj (e, id) ->
     let ans_ty, ptr_op, code = cmp_exp_lhs tc c exp in
@@ -375,7 +402,12 @@ and cmp_exp_lhs (tc : TypeCtxt.t) (c:Ctxt.t) (e:exp node) : Ll.ty * Ll.operand *
      You will find the TypeCtxt.lookup_field_name function helpful.
   *)
   | Ast.Proj (e, i) ->
-    failwith "todo: Ast.Proj case of cmp_exp_lhs"
+    let src_ty, src_op, src_code = cmp_exp tc c e in
+    let ans_ty, ans_index = TypeCtxt.lookup_field_name
+      (match src_ty with Ptr (Namedt id) -> id | _ -> failwith "Proj: not a pointer to struct") i tc in
+    let ans_id = gensym "proj" in
+    cmp_ty tc ans_ty, Id ans_id, src_code >:: I(ans_id, Gep(src_ty, src_op, [Const 0L; Const ans_index]))
+    (* failwith "todo: Ast.Proj case of cmp_exp_lhs" *)
 
 
   (* ARRAY TASK: Modify this index code to call 'oat_assert_array_length' before doing the 
