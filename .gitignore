@@ -7,3 +7,4 @@ main.native
 output
 a.out
 **/run_tests_log
+**/*.zip
