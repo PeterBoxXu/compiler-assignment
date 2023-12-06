@@ -61,32 +61,27 @@ let rec eval_cnd (cond:cnd) (c1:SymConst.t) (c2:SymConst.t) : SymConst.t =
   | _ -> failwith "eval_cnd: invoked with non-const arguments"
 
 let insn_flow (u,i:uid * insn) (d:fact) : fact =
-  print_string ("insn_flow: " ^ (Llutil.string_of_insn i) ^ "\n");
   match i with
   | Binop (bop, _, op1, op2) ->
     begin match (op1, op2) with
-    | (Const c1, Const c2) -> print_string("double_const_bop: " ^ u ^ "\n");  UidM.add u (eval_binop bop (Const c1) (Const c2)) d
+    | (Const c1, Const c2) -> UidM.add u (eval_binop bop (Const c1) (Const c2)) d
     | (Const c1, Id id)
     | (Const c1, Gid id) ->
-      print_string (u ^ ": " ^ id ^ "\n");
       let is_const = UidM.find_opt id d in
       begin match is_const with
-      | Some (Const c2) -> print_string("at this line" ^ id ^ " is of Const" ^ (Int64.to_string c2) ^ "\n"); UidM.add u (eval_binop bop (Const c1) (Const c2)) d
-      | Some (NonConst) -> print_string("at this line" ^ id ^ " is a NonConst\n");UidM.add u SymConst.NonConst d
-      | Some (UndefConst) -> print_string("at this line" ^ id ^ " is a UndefConst\n");UidM.add u SymConst.UndefConst d
-      | None -> print_string ("at this line we can't find in map: " ^ id ^ "\n"); d
-      (* failwith "insn_flow:Binop: id not found" *)
+      | Some (Const c2) -> UidM.add u (eval_binop bop (Const c1) (Const c2)) d
+      | Some (NonConst) -> UidM.add u SymConst.NonConst d
+      | Some (UndefConst) -> UidM.add u SymConst.UndefConst d
+      | None -> d
       end
     | (Id id, Const c1)
     | (Gid id, Const c1) -> 
-      print_string (u ^ ": " ^ id ^ "\n");
       let is_const = UidM.find_opt id d in
       begin match is_const with
-      | Some (Const c2) -> print_string("at this line" ^ id ^ " is of Const" ^ (Int64.to_string c2) ^ "\n"); UidM.add u (eval_binop bop (Const c2) (Const c1)) d
-      | Some (NonConst) -> print_string("at this line" ^ id ^ " is a NonConst\n");UidM.add u SymConst.NonConst d
-      | Some (UndefConst) -> print_string("at this line" ^ id ^ " is a UndefConst\n");UidM.add u SymConst.UndefConst d
-      | None -> print_string ("at this line we can't find in map: " ^ id ^ "\n"); d
-      (* failwith "insn_flow:Binop: id not found" *)
+      | Some (Const c2) -> UidM.add u (eval_binop bop (Const c2) (Const c1)) d
+      | Some (NonConst) -> UidM.add u SymConst.NonConst d
+      | Some (UndefConst) -> UidM.add u SymConst.UndefConst d
+      | None -> d
       end
     | (Id id1, Id id2)
     | (Id id1, Gid id2)
@@ -102,7 +97,6 @@ let insn_flow (u,i:uid * insn) (d:fact) : fact =
       | (_, Some (UndefConst)) -> UidM.add u SymConst.UndefConst d
       | (None, _)
       | (_, None) -> d 
-        (* failwith "insn_flow:Binop: id2 not found" *)
       end
     | _ -> failwith "insn_flow: invalid binop arguments"
     end
@@ -110,16 +104,22 @@ let insn_flow (u,i:uid * insn) (d:fact) : fact =
     begin match (op1, op2) with
     | (Const c1, Const c2) -> UidM.add u (eval_cnd cond (Const c1) (Const c2)) d
     | (Const c1, Id id)
-    | (Const c1, Gid id)
-    | (Id id, Const c1)
-    | (Gid id, Const c1) -> 
+    | (Const c1, Gid id) ->
       let is_const = UidM.find_opt id d in
       begin match is_const with
       | Some (Const c2) -> UidM.add u (eval_cnd cond (Const c1) (Const c2)) d
       | Some (NonConst) -> UidM.add u SymConst.NonConst d
       | Some (UndefConst) -> UidM.add u SymConst.UndefConst d
       | None -> d 
-        (* failwith "insn_flow:Icmp: id not found" *)
+      end
+    | (Id id, Const c1)
+    | (Gid id, Const c1) -> 
+      let is_const = UidM.find_opt id d in
+      begin match is_const with
+      | Some (Const c2) -> UidM.add u (eval_cnd cond (Const c2) (Const c1)) d
+      | Some (NonConst) -> UidM.add u SymConst.NonConst d
+      | Some (UndefConst) -> UidM.add u SymConst.UndefConst d
+      | None -> d 
       end
     | (Id id1, Id id2)
     | (Id id1, Gid id2)
@@ -135,13 +135,11 @@ let insn_flow (u,i:uid * insn) (d:fact) : fact =
       | (_, Some (UndefConst)) -> UidM.add u SymConst.UndefConst d
       | (None, _)
       | (_, None) -> d 
-        (* failwith "insn_flow:Icmp: id2 not found" *)
       end
     | _ -> failwith "insn_flow: invalid cnd arguments"
     end
   | Store _ 
   | Call (Void, _, _) -> d
-  (* -> UidM.add u SymConst.UndefConst d  *)
   | _ -> UidM.add u SymConst.NonConst d
 
 (* The flow function across terminators is trivial: they never change const info *)
@@ -176,7 +174,9 @@ module Fact =
         | (_, Some SymConst.UndefConst) -> Some SymConst.UndefConst
         | (Some SymConst.NonConst, _)
         | (_, Some SymConst.NonConst) -> Some SymConst.NonConst 
-        | _ -> None
+        | None, None -> None
+        | None, Some t -> Some t
+        | Some t, None -> Some t
       in
       List.fold_left (UidM.merge merge_f) UidM.empty ds
   end
