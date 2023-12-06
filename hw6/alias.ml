@@ -36,27 +36,26 @@ type fact = SymPtr.t UidM.t
 let insn_flow ((u,i):uid * insn) (d:fact) : fact =
   match i with
     | Alloca _ -> UidM.add u SymPtr.Unique d
-    | Load _ -> UidM.add u SymPtr.MayAlias d
+    | Bitcast (_, op, _)
+    | Gep (_, op, _) 
+    | Load (Ptr (Ptr _), op)
+    | Store (Ptr _, _, op) ->
+      begin match op with
+        | Id id -> 
+          UidM.add id SymPtr.MayAlias (UidM.add u SymPtr.MayAlias d)
+        | _ -> (UidM.add u SymPtr.MayAlias d)
+      end
     | Call (_,_,args) -> 
       (List.fold_right 
         (fun (t, op) -> 
           begin match (t, op) with
                   | (Ptr _, Id id)
-                  | (Ptr _, Gid id)
                    -> 
                     UidM.add id SymPtr.MayAlias
                   | _ -> fun m -> m 
           end)
         args) 
         (UidM.add u SymPtr.MayAlias d)
-    | Bitcast (_, op, _)
-    | Gep (_, op, _) ->
-      begin match op with
-        | Id id
-        | Gid id -> UidM.add id SymPtr.MayAlias (UidM.add u SymPtr.MayAlias d)
-        | _ -> (UidM.add u SymPtr.MayAlias d)
-      end
-    | Store ()
     | _ -> d
 
 
@@ -93,7 +92,27 @@ module Fact =
        join of two SymPtr.t facts.
     *)
     let combine (ds:fact list) : fact =
-      failwith "Alias.Fact.combine not implemented"
+      let join _ (t1: SymPtr.t option) (t2: SymPtr.t option) : SymPtr.t option = 
+        begin match t1, t2 with
+        | None, None -> None
+        | None, Some t -> Some t
+        | Some t, None -> Some t
+        | Some t1, Some t2 -> 
+          begin match t1, t2 with
+          | SymPtr.Unique, SymPtr.Unique -> Some SymPtr.Unique
+          | SymPtr.Unique, SymPtr.MayAlias -> Some SymPtr.MayAlias
+          | SymPtr.MayAlias, SymPtr.Unique -> Some SymPtr.MayAlias
+          | SymPtr.MayAlias, SymPtr.MayAlias -> Some SymPtr.MayAlias
+          | SymPtr.UndefAlias, _ -> failwith "combine: UndefAlias"
+          | _, SymPtr.UndefAlias -> failwith "combine: UndefAlias"
+          end
+        end
+      in
+      List.fold_left (UidM.merge join) UidM.empty ds
+      
+
+
+      (* failwith "Alias.Fact.combine not implemented" *)
   end
 
 (* instantiate the general framework ---------------------------------------- *)
