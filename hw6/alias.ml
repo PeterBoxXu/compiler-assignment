@@ -34,7 +34,31 @@ type fact = SymPtr.t UidM.t
 
  *)
 let insn_flow ((u,i):uid * insn) (d:fact) : fact =
-  failwith "Alias.insn_flow unimplemented"
+  match i with
+    | Alloca _ -> UidM.add u SymPtr.Unique d
+    | Load _ -> UidM.add u SymPtr.MayAlias d
+    | Call (_,_,args) -> 
+      (List.fold_right 
+        (fun (t, op) -> 
+          begin match (t, op) with
+                  | (Ptr _, Id id)
+                  | (Ptr _, Gid id)
+                   -> 
+                    UidM.add id SymPtr.MayAlias
+                  | _ -> fun m -> m 
+          end)
+        args) 
+        (UidM.add u SymPtr.MayAlias d)
+    | Bitcast (_, op, _)
+    | Gep (_, op, _) ->
+      begin match op with
+        | Id id
+        | Gid id -> UidM.add id SymPtr.MayAlias (UidM.add u SymPtr.MayAlias d)
+        | _ -> (UidM.add u SymPtr.MayAlias d)
+      end
+    | Store ()
+    | _ -> d
+
 
 
 (* The flow function across terminators is trivial: they never change alias info *)
