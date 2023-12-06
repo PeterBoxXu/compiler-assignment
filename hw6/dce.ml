@@ -24,20 +24,26 @@ open Datastructures
 let dce_block (lb:uid -> Liveness.Fact.t) 
               (ab:uid -> Alias.fact)
               (b:Ll.block) : Ll.block =
-  let filter (uid, insn: Ll.uid * Ll.insn) : bool =
-    let liveness_fact = lb uid in
-    let alias_fact = ab uid in
+  let not_dead (uid, insn: Ll.uid * Ll.insn) : bool =
+    let liveness_fact = lb uid in   
+    let alias_fact = ab uid in   
     begin match insn with
+    | Store (_, _, (Id id)) ->
+      let is_live = UidS.mem (id) liveness_fact in
+      if (is_live) then is_live 
+      else
+        let is_alias = UidM.find id alias_fact in 
+        begin match is_alias with 
+        | MayAlias -> true
+        | _ -> false
+        end
     | Call _ -> true
-    | Store (t, value, ptr) ->
-      begin match ptr with
-      | Id id -> failwith ""
-      | _ -> failwith "dce_block::filter::Store: not Id."
-      end
-    | _ -> failwith "dce_block::filter: not implemented."
+    | _ -> 
+      UidS.mem (uid) liveness_fact
     end
   in
-  failwith "dce_block: not implemented"
+  let filtered_insns = List.filter not_dead b.insns in
+  {b with insns = filtered_insns}
   
 
 let run (lg:Liveness.Graph.t) (ag:Alias.Graph.t) (cfg:Cfg.t) : Cfg.t =
