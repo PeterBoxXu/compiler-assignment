@@ -204,6 +204,65 @@ let analyze (g:Cfg.t) : Graph.t =
 (* run constant propagation on a cfg given analysis results ----------------- *)
 (* HINT: your cp_block implementation will probably rely on several helper 
    functions.                                                                 *)
+let insn_ops : insn -> operand list = function 
+  | Alloca _         -> []
+  | Load (_,o)
+  | Bitcast (_,o,_)  -> [o]
+  | Binop (_,_,o1,o2) 
+  | Store (_,o1,o2)
+  | Icmp (_,_,o1,o2) -> [o1; o2]
+  | Call (_,_,args)  -> List.map snd args
+  | Gep (_,o,os)     -> o::os
+
+let replace_ops (i: insn) (ops: operand list) : insn = 
+  begin match (i, ops) with 
+  | Alloca _, [] -> i
+  | Load (t, _), [o] -> Load (t, o)
+  | Bitcast (t1, _, t2), [o] -> Bitcast (t1, o, t2)
+  | Binop (bop, t, _, _), [o1; o2] -> Binop (bop, t, o1, o2)
+  | Store (t, _, _), [o1; o2] -> Store (t, o1, o2)
+  | Icmp (cnd, t, _, _), [o1; o2] -> Icmp (cnd, t, o1, o2)
+  | Call (t, o, args), os -> 
+    let ts = List.map fst args in
+    Call (t, o, (List.combine ts os))
+  | Gep (t, _, _), o::os -> Gep (t, o, os) 
+  | _ -> failwith ""
+  end
+
+
+let cp_block_aux (cb: uid -> fact) (b: Ll.block) : Ll.block =
+  let map_ops (f: fact) (o: operand) : operand =
+    begin match o with
+    | Id id
+    | Gid id -> 
+      begin match UidM.find_opt id f with
+      | Some (SymConst.Const c) -> Const c
+      | _ -> o
+      end
+    | _ -> o
+    end 
+  in
+  let replace_insn (u, i : uid * insn) : uid * insn = 
+    let f = cb u in
+    let ops = insn_ops (i) in
+    let const_ops = List.map (map_ops f) ops in
+    u, replace_ops i const_ops
+  in
+  let fold_insns = List.map replace_insn b.insns in
+  let fold_term = 
+    let u = fst b.term in
+    let f = cb u in
+    let fold_terminator = 
+      begin match snd b.term with
+      | Ret (ty, Some o) -> Ret (ty, Some (map_ops f o))
+      | Cbr (o, l1, l2) -> Cbr ((map_ops f o), l1, l2)
+      | t -> t
+      end 
+    in
+    u, fold_terminator
+  in
+  {insns=fold_insns; term=fold_term}
+
 let run (cg:Graph.t) (cfg:Cfg.t) : Cfg.t =
   let open SymConst in
   
@@ -211,7 +270,8 @@ let run (cg:Graph.t) (cfg:Cfg.t) : Cfg.t =
   let cp_block (l:Ll.lbl) (cfg:Cfg.t) : Cfg.t =
     let b = Cfg.block cfg l in
     let cb = Graph.uid_out cg l in
-    failwith "Constprop.cp_block unimplemented"
+    let b' = cp_block_aux cb b in
+    Cfg.add_block l b' cfg
   in
 
   LblS.fold cp_block (Cfg.nodes cfg) cfg
