@@ -24,7 +24,21 @@ open Datastructures
 let dce_block (lb:uid -> Liveness.Fact.t) 
               (ab:uid -> Alias.fact)
               (b:Ll.block) : Ll.block =
-  failwith "Dce.dce_block unimplemented"
+  let filter (uid, insn: Ll.uid * Ll.insn) : bool =
+    let liveness_fact = lb uid in
+    let alias_fact = ab uid in
+    begin match insn with
+    | Call _ -> true
+    | Store (t, value, ptr) ->
+      begin match ptr with
+      | Id id -> failwith ""
+      | _ -> failwith "dce_block::filter::Store: not Id."
+      end
+    | _ -> failwith "dce_block::filter: not implemented."
+    end
+  in
+  failwith "dce_block: not implemented"
+  
 
 let run (lg:Liveness.Graph.t) (ag:Alias.Graph.t) (cfg:Cfg.t) : Cfg.t =
 
