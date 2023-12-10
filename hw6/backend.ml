@@ -2,6 +2,7 @@
 open Ll
 open Llutil
 open X86
+open Datastructures
 
 
 (* allocated llvmlite function bodies --------------------------------------- *)
@@ -740,8 +741,9 @@ let greedy_layout (f:Ll.fdecl) (live:liveness) : layout =
 *)
 
 module InterferenceG = struct
-  open Datastructures
   type t = (Alloc.loc option * UidSet.t) UidM.t
+
+  let empty = UidM.empty
 
   let color (g:t) (k : uid) (c : Alloc.loc) : t =
     UidM.update (fun (_, s) -> Some c, s) k g
@@ -749,13 +751,19 @@ module InterferenceG = struct
   let neighbors (g:t) (k : uid) : UidSet.t =
     snd (UidM.find k g)
 
-  let add_node (g:t) (k : uid) (neighbors : UidSet.t) (c : Alloc.loc option) : t =
+  let add_node (g:t) (k : uid) (c, neighbors : (Alloc.loc option * UidSet.t)) : t =
     (* for all neighbors of k, add k as their neighbor as well! *)
     let g' = UidSet.fold (fun n g0 -> 
         let (c, s) = UidM.find n g0 in
         UidM.add n (c, UidSet.add k s) g0
       ) neighbors g in
     UidM.add k (c, neighbors) g'
+
+  let add_edge (g:t) (k1 : uid) (k2 : uid) : t =
+    let (c1, s1) = UidM.find k1 g in
+    let (c2, s2) = UidM.find k2 g in
+    let g' = UidM.add k1 (c1, UidSet.add k2 s1) g in
+    UidM.add k2 (c2, UidSet.add k1 s2) g'
 
   let remove_node (g:t) (k : uid) : t * (Alloc.loc option * UidSet.t) =
     let (c, neighbors) = UidM.find k g in
@@ -765,17 +773,126 @@ module InterferenceG = struct
       ) neighbors g in
     UidM.remove k g', (c, neighbors)
 
-  let _find_node_with_deg (g:t) (deg : int) : uid * (Alloc.loc option * UidSet.t) =
-    UidM.find_first (fun k -> let (_, s) = UidM.find k g in UidSet.cardinal s = deg) g
+  let _find_node_with_deg_less_than (g:t) (k : int) : uid =
+    let uid, _ =UidM.find_first (fun uid -> let (_, s) = UidM.find uid g in UidSet.cardinal s < k) g
+    in uid
 
-  let find_node_with_deg (g:t) (deg : int) : (uid * (Alloc.loc option * UidSet.t)) option =
-    try Some (_find_node_with_deg g deg) with Not_found -> None
-end
-
-let 
+  let find_node_with_deg_less_than (g:t) (k : int) : uid option =
+    try Some (_find_node_with_deg_less_than g k) with Not_found -> None
+  
+  let find_node_with_max_deg (g:t) : uid = 
+    let find_bigger (this_uid : string) (this: (Alloc.loc option * UidSet.t)) (biggest: string * (Alloc.loc option * UidSet.t)) : (string * (Alloc.loc option * UidSet.t)) = 
+      let deg_this = UidSet.cardinal (snd this) in
+      let deg_biggest = UidSet.cardinal (snd (snd biggest)) in
+      if (deg_this < deg_biggest) then 
+        biggest
+      else (this_uid, this)
+    in
+    let init = ("", (None, UidSet.empty)) in
+    fst (UidM.fold find_bigger g init)
+end    
 
 let better_layout (f:Ll.fdecl) (live:liveness) : layout =
-  failwith "better_layout not implemented"
+
+  let pal = LocSet.(caller_save 
+                    |> remove (Alloc.LReg Rax)
+                    |> remove (Alloc.LReg Rcx)                       
+                   ) in
+
+  let n_spill = ref 0 in
+
+  let spill () = (incr n_spill; Alloc.LStk (- !n_spill)) in
+
+  (* Step 1: add all nodes onto graph, without edges or color. *)
+  let g_nodes = 
+    fold_fdecl
+      (fun g (x, _) -> InterferenceG.add_node g x (None, UidSet.empty))
+      (fun g _ -> g)
+      (fun g (x, i) ->
+        if insn_assigns i then
+          let live_in = live.live_in x in
+          let g' = UidSet.fold (fun y g0 ->
+              InterferenceG.add_node g0 y (None, live_in)
+            ) live_in g in
+          InterferenceG.add_node g' x (None, live_in)
+        else g)
+      (fun g _ -> g)
+      InterferenceG.empty f in
+
+  (* Step 2: add all edge relationship between nodes, which can be access via traversing liveness facts. *)
+  let g_edges = 
+    fold_fdecl
+      (fun g _ -> g)
+      (fun g _ -> g)
+      (fun g (x, i) ->
+        if insn_assigns i then
+          let live_in = live.live_in x in
+          let g' = UidSet.fold (fun y g0 ->
+              InterferenceG.add_edge g0 x y
+            ) live_in g in
+          InterferenceG.add_edge g' x x
+        else g)
+      (fun g _ -> g)
+      g_nodes f in
+
+  (* Step 3: color all "pre-colored" nodes *)
+  (* TODO *)
+  (* Step 4: color all other nodes *)
+  let rec fold_graph (g: InterferenceG.t) (stack: (string * (Alloc.loc option * UidSet.t)) list): (string * (Alloc.loc option * UidSet.t)) list =
+    let k = 7 in
+    if (UidM.is_empty g) then stack
+    else
+    begin match (InterferenceG.find_node_with_deg_less_than g k) with
+    | Some (uid) -> 
+      let g', (loc, neighbors) = InterferenceG.remove_node g uid in
+      let stack' = (uid, (loc, neighbors)) :: stack in
+      fold_graph g' stack'
+
+    | None -> 
+      let uid = InterferenceG.find_node_with_max_deg g in
+      let g', (loc, neighbors) = InterferenceG.remove_node g uid in
+      let stack' = (uid, (Some (spill()), neighbors)) :: stack in
+      fold_graph g' stack'
+    end
+  in
+  
+  let stack = fold_graph g_edges [] in
+
+  let choose_color (g: InterferenceG.t) (neighbors: UidSet.t) : Alloc.loc =
+    let used_colors (g: InterferenceG.t) (neighbors: UidSet.t) : LocSet.t = 
+      let add_color (l : Alloc.loc option) (ls : LocSet.t) : LocSet.t = 
+        begin match l with
+        | Some c -> LocSet.add c ls
+        | None -> ls 
+        end
+      in
+      UidSet.fold (fun v ls -> add_color (fst (UidM.find v g)) ls ) neighbors LocSet.empty
+    in
+
+    let available_colors = LocSet.diff pal (used_colors g neighbors) in
+    LocSet.choose available_colors
+  in
+
+  let fold_stack (g: InterferenceG.t) (uid, (loc, neighbors): (string * (Alloc.loc option * UidSet.t))) : InterferenceG.t = 
+    begin match loc with
+    | None -> 
+      let color = choose_color g neighbors in
+      InterferenceG.add_node g uid (Some color, neighbors)
+    | Some (Alloc.LStk offset) -> InterferenceG.add_node g uid (loc, neighbors)
+    | _ -> failwith "fold_stack: Folding on a precolored node"
+    end
+  in 
+
+  let g_colored = List.fold_left fold_stack InterferenceG.empty stack in
+  
+  { uid_loc= (fun x -> 
+    begin match fst (UidM.find x g_colored) with
+    | None -> failwith "better_layout: uncolored node in colored graph"
+    | Some loc -> loc
+    end)
+    ; spill_bytes = 8 * !n_spill
+  }
+
 
 
 (* register allocation options ---------------------------------------------- *)
