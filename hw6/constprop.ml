@@ -136,7 +136,8 @@ let insn_flow (u,i:uid * insn) (d:fact) : fact =
       | (None, _)
       | (_, None) -> d 
       end
-    | _ -> failwith "insn_flow: invalid cnd arguments"
+    | (Id id, Null) | (Gid id, Null) -> d
+    | _ -> failwith ("insn_flow: invalid cnd arguments. Arguments are: " ^ Llutil.string_of_operand  op1 ^ " and " ^ Llutil.string_of_operand op2 )
     end
   | Store _ 
   | Call (Void, _, _) -> d

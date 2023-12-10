@@ -807,7 +807,7 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   let g_nodes = 
     fold_fdecl
       (fun g (x, _) -> InterferenceG.add_node g x (None, UidSet.empty))
-      (fun g _ -> g)
+      (fun g lbl -> InterferenceG.add_node g lbl (Some (Alloc.LLbl (Platform.mangle lbl)), UidSet.empty))
       (fun g (x, i) ->
         if insn_assigns i then
           let live_in = live.live_in x in
@@ -878,7 +878,8 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     | None -> 
       let color = choose_color g neighbors in
       InterferenceG.add_node g uid (Some color, neighbors)
-    | Some (Alloc.LStk offset) -> InterferenceG.add_node g uid (loc, neighbors)
+    | Some (Alloc.LStk _) -> InterferenceG.add_node g uid (loc, neighbors)
+    | Some (Alloc.LLbl _) -> InterferenceG.add_node g uid (loc, neighbors)
     | _ -> failwith "fold_stack: Folding on a precolored node"
     end
   in 
