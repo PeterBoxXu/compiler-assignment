@@ -37,6 +37,7 @@ let dce_block (lb:uid -> Liveness.Fact.t)
         | MayAlias -> true
         | _ -> false
         end
+    | Store (_, _, Gid id) -> true
     | Call _ -> true
     | _ -> 
       UidS.mem (uid) liveness_fact
