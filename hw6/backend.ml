@@ -850,31 +850,31 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   (* Step 1: add all nodes onto graph, without edges or color. *)
   let g_nodes = 
     fold_fdecl
-      (fun g (x, _) -> InterferenceG.add_node g x (Some (alloc_arg()), UidSet.empty))
+      (fun g (x, _) -> InterferenceG.add_node g x (None, UidSet.empty))
       (fun g lbl -> InterferenceG.add_node g lbl (Some (Alloc.LLbl (Platform.mangle lbl)), UidSet.empty))
       (fun g (x, i) ->
         if insn_assigns i 
         then
           let live_in = live.live_in x in
+
+          let print_live_in (live_in : UidSet.t) : unit =
+            UidSet.iter (fun uid -> Printf.printf "%s, " uid) live_in;
+            Printf.printf "\n";
+          in
+          print_string ("live_in of " ^ x ^ ": ");
+          print_live_in (live_in);
+          print_string ("fold_insn, the uid x: " ^ x ^ "\n");
+
           let g' = UidSet.fold (fun y g0 ->
-              InterferenceG.add_node g0 y (None, live_in)
+              InterferenceG.add_node g0 y (None, UidSet.empty) (* covered the previous color !!!!*) (* complexity...haha, not equvalent to what haoran said*)
             ) live_in g in
-          print_string ("x: " ^ x ^ "\n");
-          InterferenceG.add_node g' x (None, live_in)
-        else 
+          InterferenceG.add_node g' x (None, UidSet.empty)
+        else begin
+          print_string ("fold_insn, the uid x: " ^ x ^ "\n"); 
           InterferenceG.add_node g x (Some Alloc.LVoid, UidSet.empty)
-      )
-      (fun g (x, term) -> 
-        let live_in = UidSet.remove x (live.live_in x) in
-        let g' = UidSet.fold (fun y g0 ->
-            InterferenceG.add_node g0 y (None, live_in)
-          ) live_in g in
-        begin match term with
-        | Ll.Ret (_, Some (Id id)) 
-        | Ll.Ret (_, Some (Gid id)) -> InterferenceG.add_node g' id (Some (Alloc.LReg Rax), UidSet.empty) 
-        | _ -> g'
         end
       )
+      (fun g (x, term) -> g)
       InterferenceG.empty f in
 
   InterferenceG.print_graph g_nodes;
@@ -891,16 +891,38 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
           let g' = UidSet.fold (fun y g0 ->
               InterferenceG.add_edge g0 x y
             ) live_in g in
-          g'
+          InterferenceG.add_node g' x (None, live_in)
         else g)
-      (fun g _ -> g)
+      (fun g (x, term) -> 
+        let live_in = UidSet.remove x (live.live_in x) in
+        let g' = UidSet.fold (fun y g0 ->
+            InterferenceG.add_node g0 y (None, live_in)
+          ) live_in g in
+        g'
+      )
       g_nodes f in
 
   InterferenceG.print_graph g_edges;
   print_string "g_edges completed\n";
 
   (* Step 3: color all "pre-colored" nodes *)
-  (* TODO *)
+  let g_precolored = 
+    fold_fdecl
+    (fun g (x, _) -> InterferenceG.add_node g x (Some(alloc_arg()), UidSet.empty))
+    (fun g _ -> g)
+    (fun g _ -> g)
+    (fun g (x, term) ->         
+      begin match term with
+      | Ll.Ret (_, Some (Id id)) 
+      | Ll.Ret (_, Some (Gid id)) -> InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty) 
+      | _ -> g
+      end
+    )
+  g_edges f in
+
+  InterferenceG.print_graph g_precolored;
+  print_string "g_precolored completed\n";
+
   (* Step 4: color all other nodes *)
   let rec fold_graph (g: InterferenceG.t) (stack: (string * (Alloc.loc option * UidSet.t)) list): (string * (Alloc.loc option * UidSet.t)) list =
     let k = 7 in
@@ -920,8 +942,9 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     end
   in
   
-  let stack = fold_graph g_edges [] in
+  let stack = fold_graph g_precolored [] in
 
+  print_string "stack: \n";
   InterferenceG.print_stack stack;
 
   (* Step 5: assign colors to all nodes in stack *)
@@ -955,8 +978,9 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
 
   let g_colored = List.fold_left fold_stack InterferenceG.empty stack in
 
-  print_string "HEREHEREHEREHEREHEREHEREHEREHEREHERE\n";
+
   InterferenceG.print_graph g_colored;
+  print_string "g_colored completed\n";
   
   { uid_loc= (fun x -> 
     begin match (try (fst (UidM.find x g_colored)) with Not_found -> failwith ("error at here, x = " ^ x))  with
@@ -1029,6 +1053,7 @@ let set_regalloc name =
 (* Compile a function declaration using the chosen liveness analysis
    and register allocation strategy. *)
 let compile_fdecl tdecls (g:gid) (f:Ll.fdecl) : x86stream =
+  print_string ("function name = " ^ g ^ "\n");
   let liveness = !liveness_fn f in
   let layout = !layout_fn f liveness in
   (* 
