@@ -969,6 +969,8 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     | None -> 
       print_string ("fold_at: " ^ uid ^ "\n");
       let color = choose_color g neighbors in
+      InterferenceG.add_node g uid (Some color, neighbors)
+    | Some (Alloc.LStk offset) -> InterferenceG.add_node g uid (loc, neighbors)
       print_string ("fold_at_loc: " ^ uid ^ " " ^ (Alloc.str_loc color) ^ "\n");
       let graph = InterferenceG.add_node g uid (Some color, neighbors) in
       print_string ("fold_at_loc_end: " ^ uid ^ " " ^ (Alloc.str_loc color) ^ "\n"); graph
