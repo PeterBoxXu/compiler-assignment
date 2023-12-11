@@ -809,7 +809,13 @@ module InterferenceG = struct
     print_string ("-----------------------------\n"); ()
 
   let _find_node_with_deg_less_than (g:t) (k : int) : uid =
-    let uid, _ =UidM.find_first (fun uid -> let (_, s) = UidM.find uid g in UidSet.cardinal s < k) g
+    let uid, _ = UidM.find_first 
+    (fun uid -> 
+      let (loc, s) = UidM.find uid g in 
+      match loc with
+      | None -> UidSet.cardinal s < k
+      | Some _ -> false
+    ) g
     in uid
 
   let find_node_with_deg_less_than (g:t) (k : int) : uid option =
@@ -819,12 +825,19 @@ module InterferenceG = struct
     let find_bigger (this_uid : string) (this: (Alloc.loc option * UidSet.t)) (biggest: string * (Alloc.loc option * UidSet.t)) : (string * (Alloc.loc option * UidSet.t)) = 
       let deg_this = UidSet.cardinal (snd this) in
       let deg_biggest = UidSet.cardinal (snd (snd biggest)) in
-      if (deg_this < deg_biggest) then 
-        biggest
-      else (this_uid, this)
+      begin match fst this with
+      | None ->
+        if (deg_this < deg_biggest) then 
+          biggest
+        else (this_uid, this)
+      | Some _ -> biggest
+      end
     in
     let init = ("", (None, UidSet.empty)) in
     fst (UidM.fold find_bigger g init)
+
+  let all_colored (g:t) : bool =
+    UidM.for_all (fun _ (loc, _) -> loc <> None) g
 end    
 
 let better_layout (f:Ll.fdecl) (live:liveness) : layout =
@@ -924,9 +937,9 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   print_string "g_precolored completed\n";
 
   (* Step 4: color all other nodes *)
-  let rec fold_graph (g: InterferenceG.t) (stack: (string * (Alloc.loc option * UidSet.t)) list): (string * (Alloc.loc option * UidSet.t)) list =
+  let rec fold_graph (g: InterferenceG.t) (stack: (string * (Alloc.loc option * UidSet.t)) list): InterferenceG.t * ((string * (Alloc.loc option * UidSet.t)) list) =
     let k = 7 in
-    if (UidM.is_empty g) then stack
+    if (InterferenceG.all_colored g) then g, stack
     else
     begin match (InterferenceG.find_node_with_deg_less_than g k) with
     | Some (uid) -> 
@@ -942,8 +955,10 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     end
   in
   
-  let stack = fold_graph g_precolored [] in
+  let sub_graph, stack = fold_graph g_precolored [] in
 
+  print_string "sub_graph: \n";
+  InterferenceG.print_graph sub_graph;
   print_string "stack: \n";
   InterferenceG.print_stack stack;
 
@@ -976,7 +991,7 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     end
   in 
 
-  let g_colored = List.fold_left fold_stack InterferenceG.empty stack in
+  let g_colored = List.fold_left fold_stack sub_graph stack in
 
 
   InterferenceG.print_graph g_colored;
