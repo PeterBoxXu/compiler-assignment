@@ -879,8 +879,7 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
             ) live_in g in
           g'
         else g)
-      (fun g (x, term) -> g
-        )
+      (fun g _ -> g)
       g_nodes f in
 
   InterferenceG.print_graph g_edges;
