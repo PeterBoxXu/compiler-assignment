@@ -919,6 +919,26 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   print_string "g_edges completed\n";
 
   (* Step 3: color all "pre-colored" nodes *)
+  let used_colors (g: InterferenceG.t) (neighbors: UidSet.t) : LocSet.t = 
+    let add_color (l : Alloc.loc option) (ls : LocSet.t) : LocSet.t = 
+      begin match l with
+      | Some c -> LocSet.add c ls
+      | None -> ls 
+      end
+    in
+    UidSet.fold (fun v ls -> add_color (fst (UidM.find v g)) ls ) neighbors LocSet.empty
+  in
+
+  let choose_color (g: InterferenceG.t) (neighbors: UidSet.t) : Alloc.loc =
+    let available_colors = LocSet.diff pal (used_colors g neighbors) in
+    LocSet.choose available_colors
+  in
+
+  let choose_rax (g: InterferenceG.t) (neighbors: UidSet.t) : bool =
+    let available_colors = LocSet.diff (LocSet.singleton (Alloc.LReg Rax)) (used_colors g neighbors) in
+    LocSet.is_empty available_colors
+  in
+
   let g_precolored = 
     fold_fdecl
     (fun g (x, _) -> InterferenceG.add_node g x (Some(alloc_arg()), UidSet.empty))
@@ -927,7 +947,12 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     (fun g (x, term) ->         
       begin match term with
       | Ll.Ret (_, Some (Id id)) 
-      | Ll.Ret (_, Some (Gid id)) -> InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty) 
+      | Ll.Ret (_, Some (Gid id)) -> 
+        begin match choose_rax g (snd (UidM.find id g)) with
+        | false -> InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty)
+        | true -> g
+        end
+        (* InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty) *)
       | _ -> g
       end
     )
@@ -963,21 +988,6 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   InterferenceG.print_stack stack;
 
   (* Step 5: assign colors to all nodes in stack *)
-
-  let choose_color (g: InterferenceG.t) (neighbors: UidSet.t) : Alloc.loc =
-    let used_colors (g: InterferenceG.t) (neighbors: UidSet.t) : LocSet.t = 
-      let add_color (l : Alloc.loc option) (ls : LocSet.t) : LocSet.t = 
-        begin match l with
-        | Some c -> LocSet.add c ls
-        | None -> ls 
-        end
-      in
-      UidSet.fold (fun v ls -> add_color (fst (UidM.find v g)) ls ) neighbors LocSet.empty
-    in
-
-    let available_colors = LocSet.diff pal (used_colors g neighbors) in
-    LocSet.choose available_colors
-  in
 
   let fold_stack (g: InterferenceG.t) (uid, (loc, neighbors): (string * (Alloc.loc option * UidSet.t))) : InterferenceG.t = 
     begin match loc with
