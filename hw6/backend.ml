@@ -751,15 +751,24 @@ module InterferenceG = struct
   let neighbors (g:t) (k : uid) : UidSet.t =
     snd (UidM.find k g)
 
-  let add_node (g:t) (k : uid) (c, neighbors : (Alloc.loc option * UidSet.t)) : t =
+  let add_node (g:t) (k : uid) (c, live_in : (Alloc.loc option * UidSet.t)) : t =
+    let neighbors = UidSet.remove k live_in in
     (* for all neighbors of k, add k as their neighbor as well! *)
     let g' = UidSet.fold (fun n g0 -> 
-        let (c, s) = UidM.find n g0 in
+        let (c, s) = 
+        try 
+          UidM.find n g0
+        with Not_found -> failwith ("add_node: Not_found k = " ^ k ^ " n = " ^ n)
+        in
         UidM.add n (c, UidSet.add k s) g0
       ) neighbors g in
-    UidM.add k (c, neighbors) g'
+    let old_neighbors = try snd (UidM.find k g') with Not_found -> UidSet.empty in
+    let new_neighbors = UidSet.union old_neighbors neighbors in
+    UidM.add k (c, new_neighbors) g'
 
   let add_edge (g:t) (k1 : uid) (k2 : uid) : t =
+    if k1 = k2 then g
+    else
     let (c1, s1) = UidM.find k1 g in
     let (c2, s2) = UidM.find k2 g in
     let g' = UidM.add k1 (c1, UidSet.add k2 s1) g in
@@ -768,10 +777,36 @@ module InterferenceG = struct
   let remove_node (g:t) (k : uid) : t * (Alloc.loc option * UidSet.t) =
     let (c, neighbors) = UidM.find k g in
     let g' = UidSet.fold (fun n g0 -> 
-        let (c, s) = UidM.find n g0 in
+        let (c, s) = try UidM.find n g0 with Not_found -> failwith ("remove_node: Not_found k = " ^ k ^ " n = " ^ n) in
         UidM.add n (c, UidSet.remove k s) g0
       ) neighbors g in
     UidM.remove k g', (c, neighbors)
+
+  let print_graph (g:t) : unit = 
+    let print_node (uid : string) ((loc, neighbors) : (Alloc.loc option * UidSet.t)) : unit =
+      Printf.printf "uid: %s, loc: %s, neighbors: " uid (((
+        function | (Some x) -> Alloc.str_loc x 
+                  | None -> "None") loc));
+      UidSet.iter (fun uid -> Printf.printf "%s, " uid) neighbors;
+      Printf.printf "\n"
+    in
+
+    print_string ("-----------------------------\n");
+    UidM.iter print_node g;
+    print_string ("-----------------------------\n"); ()
+
+  let print_stack (stack : (string * (Alloc.loc option * UidSet.t)) list) : unit =
+    let print_node (uid : string) ((loc, neighbors) : (Alloc.loc option * UidSet.t)) : unit =
+      Printf.printf "uid: %s, loc: %s, neighbors: " uid (((
+        function | (Some x) -> Alloc.str_loc x 
+                  | None -> "None") loc));
+      UidSet.iter (fun uid -> Printf.printf "%s, " uid) neighbors;
+      Printf.printf "\n"
+    in
+
+    print_string ("-----------------------------\n");
+    List.iter (fun (uid, (loc, neighbors)) -> print_node uid (loc, neighbors)) stack;
+    print_string ("-----------------------------\n"); ()
 
   let _find_node_with_deg_less_than (g:t) (k : int) : uid =
     let uid, _ =UidM.find_first (fun uid -> let (_, s) = UidM.find uid g in UidSet.cardinal s < k) g
@@ -819,6 +854,8 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
       (fun g _ -> g)
       InterferenceG.empty f in
 
+  InterferenceG.print_graph g_nodes;
+
   (* Step 2: add all edge relationship between nodes, which can be access via traversing liveness facts. *)
   let g_edges = 
     fold_fdecl
@@ -834,6 +871,8 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
         else g)
       (fun g _ -> g)
       g_nodes f in
+
+  InterferenceG.print_graph g_edges;
 
   (* Step 3: color all "pre-colored" nodes *)
   (* TODO *)
@@ -857,6 +896,10 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   in
   
   let stack = fold_graph g_edges [] in
+
+  InterferenceG.print_stack stack;
+
+  (* Step 5: assign colors to all nodes in stack *)
 
   let choose_color (g: InterferenceG.t) (neighbors: UidSet.t) : Alloc.loc =
     let used_colors (g: InterferenceG.t) (neighbors: UidSet.t) : LocSet.t = 
