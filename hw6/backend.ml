@@ -828,20 +828,29 @@ module InterferenceG = struct
 end    
 
 let better_layout (f:Ll.fdecl) (live:liveness) : layout =
-
   let pal = LocSet.(caller_save 
                     |> remove (Alloc.LReg Rax)
                     |> remove (Alloc.LReg Rcx)                       
                    ) in
 
+  let n_arg = ref 0 in
   let n_spill = ref 0 in
 
   let spill () = (incr n_spill; Alloc.LStk (- !n_spill)) in
 
+  let alloc_arg () =
+    let res =
+      match arg_loc !n_arg with
+      | Alloc.LReg Rcx -> spill ()
+      | x -> x
+    in
+    incr n_arg; res
+  in
+
   (* Step 1: add all nodes onto graph, without edges or color. *)
   let g_nodes = 
     fold_fdecl
-      (fun g (x, _) -> g)
+      (fun g (x, _) -> InterferenceG.add_node g x (Some (alloc_arg()), UidSet.empty))
       (fun g lbl -> InterferenceG.add_node g lbl (Some (Alloc.LLbl (Platform.mangle lbl)), UidSet.empty))
       (fun g (x, i) ->
         if insn_assigns i then
@@ -852,15 +861,16 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
           InterferenceG.add_node g' x (None, live_in)
         else g)
       (fun g (x, term) -> 
+        let live_in = UidSet.remove x (live.live_in x) in
+        let g' = UidSet.fold (fun y g0 ->
+            InterferenceG.add_node g0 y (None, live_in)
+          ) live_in g in
         begin match term with
-        | Ret (Void, None) -> g
-        | _ -> let live_in = UidSet.remove x (live.live_in x) in
-          let g' = UidSet.fold (fun y g0 ->
-              InterferenceG.add_node g0 y (None, live_in)
-            ) live_in g in
-          g'
+        | Ll.Ret (_, Some (Id id)) 
+        | Ll.Ret (_, Some (Gid id)) -> InterferenceG.add_node g' id (Some (Alloc.LReg Rax), UidSet.empty) 
+        | _ -> g'
         end
-        )
+      )
       InterferenceG.empty f in
 
   InterferenceG.print_graph g_nodes;
@@ -934,7 +944,8 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
       InterferenceG.add_node g uid (Some color, neighbors)
     | Some (Alloc.LStk _) -> InterferenceG.add_node g uid (loc, neighbors)
     | Some (Alloc.LLbl _) -> InterferenceG.add_node g uid (loc, neighbors)
-    | _ -> failwith "fold_stack: Folding on a precolored node"
+    | Some (Alloc.LReg _) -> InterferenceG.add_node g uid (loc, neighbors)
+    | _ -> failwith "fold_stack: loc is not a valid location"
     end
   in 
 
@@ -944,7 +955,7 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   InterferenceG.print_graph g_colored;
   
   { uid_loc= (fun x -> 
-    begin match fst (UidM.find x g_colored) with
+    begin match fst (UidM.find x g_colored)  with
     | None -> failwith "better_layout: uncolored node in colored graph"
     | Some loc -> loc
     end)
