@@ -809,11 +809,12 @@ module InterferenceG = struct
     print_string ("-----------------------------\n"); ()
 
   let _find_node_with_deg_less_than (g:t) (k : int) : uid =
-    let uid, _ = UidM.find_first 
+    let uid, _ = UidM.find_last
     (fun uid -> 
       let (loc, s) = UidM.find uid g in 
+      if uid = "_array272" then print_string ("_array272, deg: " ^ (string_of_int (UidSet.cardinal s)) ^ "\n");
       match loc with
-      | None -> UidSet.cardinal s < k
+      | None -> (UidSet.cardinal s) < k
       | Some _ -> false
     ) g
     in uid
@@ -984,8 +985,10 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
 
     | None -> 
       let uid = InterferenceG.find_node_with_max_deg g in
+      let _, dummy_neighbors = UidM.find uid g in
+      
+      if (uid = "_array272") then (print_string ("uid = " ^ uid ^ "\n"); print_string ("deg = " ^ string_of_int (UidSet.cardinal dummy_neighbors) ^ "\n"); InterferenceG.print_graph g;) else ();
       let g', (loc, neighbors) = InterferenceG.remove_node g uid in
-      if (uid = "_array272") then print_string ("uid = " ^ uid ^ "\n");
       let stack' = (uid, (Some (spill()), neighbors)) :: stack in (* why ? *)
       fold_graph g' stack'
     end
