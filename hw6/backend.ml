@@ -841,7 +841,7 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   (* Step 1: add all nodes onto graph, without edges or color. *)
   let g_nodes = 
     fold_fdecl
-      (fun g (x, _) -> InterferenceG.add_node g x (None, UidSet.empty))
+      (fun g (x, _) -> g)
       (fun g lbl -> InterferenceG.add_node g lbl (Some (Alloc.LLbl (Platform.mangle lbl)), UidSet.empty))
       (fun g (x, i) ->
         if insn_assigns i then
@@ -851,10 +851,20 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
             ) live_in g in
           InterferenceG.add_node g' x (None, live_in)
         else g)
-      (fun g _ -> g)
+      (fun g (x, term) -> 
+        begin match term with
+        | Ret (Void, None) -> g
+        | _ -> let live_in = UidSet.remove x (live.live_in x) in
+          let g' = UidSet.fold (fun y g0 ->
+              InterferenceG.add_node g0 y (None, live_in)
+            ) live_in g in
+          g'
+        end
+        )
       InterferenceG.empty f in
 
   InterferenceG.print_graph g_nodes;
+  print_string "g_nodes completed\n";
 
   (* Step 2: add all edge relationship between nodes, which can be access via traversing liveness facts. *)
   let g_edges = 
@@ -867,12 +877,14 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
           let g' = UidSet.fold (fun y g0 ->
               InterferenceG.add_edge g0 x y
             ) live_in g in
-          InterferenceG.add_edge g' x x
+          g'
         else g)
-      (fun g _ -> g)
+      (fun g (x, term) -> g
+        )
       g_nodes f in
 
   InterferenceG.print_graph g_edges;
+  print_string "g_edges completed\n";
 
   (* Step 3: color all "pre-colored" nodes *)
   (* TODO *)
@@ -928,6 +940,9 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   in 
 
   let g_colored = List.fold_left fold_stack InterferenceG.empty stack in
+
+  print_string "HEREHEREHEREHEREHEREHEREHEREHEREHERE\n";
+  InterferenceG.print_graph g_colored;
   
   { uid_loc= (fun x -> 
     begin match fst (UidM.find x g_colored) with
