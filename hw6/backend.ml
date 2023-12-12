@@ -649,7 +649,11 @@ let greedy_layout (f:Ll.fdecl) (live:liveness) : layout =
     incr n_arg; res
   in
   (* The available palette of registers.  Excludes Rax and Rcx *)
-  let pal = LocSet.(caller_save 
+  let pal = LocSet.(caller_save
+                    |> add (Alloc.LReg Rbx)
+                    |> add (Alloc.LReg R12)   
+                    |> add (Alloc.LReg R13)
+                    |> add (Alloc.LReg R14)    
                     |> remove (Alloc.LReg Rax)
                     |> remove (Alloc.LReg Rcx)                       
                    )
@@ -973,17 +977,17 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     fold_fdecl
     (fun g (x, _) -> 
       let (loc, neighbors) = UidM.find x g in
-      let expected_loc = 
-        begin match alloc_arg() with
+      let expected_loc = alloc_arg()
+        (* begin match alloc_arg() with
         | (Alloc.LReg r) -> Some (Alloc.LReg r)
         | _ -> None
-        end
+        end *)
       in
       (* begin match choose_singleton g neighbors expected_loc with
       | true -> InterferenceG.add_node g x (Some expected_loc, UidSet.empty)
       | false -> InterferenceG.add_node g x (Some (spill()), UidSet.empty)
       end *)
-      InterferenceG.add_node g x (expected_loc, UidSet.empty)
+      InterferenceG.add_node g x (Some expected_loc, UidSet.empty)
     )
       (* InterferenceG.add_node g x (Some(alloc_arg()), UidSet.empty)) *)
     (fun g _ -> g)
@@ -1055,9 +1059,36 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
 
   InterferenceG.print_graph g_colored;
   print_string "g_colored completed\n";
+
+  (* Step 6: revisit colored graph, see if we can reassign some spilled nodes with a valid register color*)
+
+  let optimistic_color (uid: string) (loc, neighbors: Alloc.loc option * UidSet.t) (g0: InterferenceG.t) : InterferenceG.t = 
+    begin match loc with
+    | Some (Alloc.LStk _) -> 
+      (try
+        let color = choose_color g0 neighbors in 
+        InterferenceG.add_node g0 uid (Some color, neighbors)
+      with | Not_found -> g0)
+    | _ -> g0
+    end 
+  in 
+
+  let g_optimistic = fold_fdecl
+    (fun g (x, _) -> g)
+    (fun g _ -> g)
+    (fun g (x, i) ->
+      if insn_assigns i 
+      then optimistic_color x (UidM.find x g) g
+      else g)
+    (fun g _ -> g)
+    g_colored f in
+
+
+  InterferenceG.print_graph g_optimistic;
+  print_string "g_optimistic completed\n";
   
   { uid_loc= (fun x -> 
-    begin match (try (fst (UidM.find x g_colored)) with Not_found -> failwith ("error at here, x = " ^ x))  with
+    begin match (try (fst (UidM.find x g_optimistic)) with Not_found -> failwith ("error at here, x = " ^ x))  with
     | None -> failwith "better_layout: uncolored node in colored graph"
     | Some loc -> loc
     end)
