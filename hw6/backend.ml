@@ -926,13 +926,16 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
       (fun g _ -> g)
       (fun g _ -> g)
       (fun g (x, i) ->
+        let live_in = live.live_in x in
+        let g_enum = UidSet.fold (fun y g0 ->
+          InterferenceG.add_node g0 y (None, live_in)
+        ) live_in g in
         if insn_assigns i then
-          let live_in = live.live_in x in
           let g' = UidSet.fold (fun y g0 ->
               InterferenceG.add_edge g0 x y
-            ) live_in g in
+            ) live_in g_enum in
           InterferenceG.add_node g' x (None, live_in)
-        else g)
+        else g_enum)
       (fun g (x, term) -> 
         let live_in = UidSet.remove x (live.live_in x) in
         let g' = UidSet.fold (fun y g0 ->
@@ -970,41 +973,34 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     fold_fdecl
     (fun g (x, _) -> 
       let (loc, neighbors) = UidM.find x g in
-      let expected_loc = alloc_arg() in
+      let expected_loc = 
+        begin match alloc_arg() with
+        | (Alloc.LReg r) -> Some (Alloc.LReg r)
+        | _ -> None
+        end
+      in
       (* begin match choose_singleton g neighbors expected_loc with
       | true -> InterferenceG.add_node g x (Some expected_loc, UidSet.empty)
       | false -> InterferenceG.add_node g x (Some (spill()), UidSet.empty)
       end *)
-      InterferenceG.add_node g x (Some expected_loc, UidSet.empty)
+      InterferenceG.add_node g x (expected_loc, UidSet.empty)
     )
       (* InterferenceG.add_node g x (Some(alloc_arg()), UidSet.empty)) *)
     (fun g _ -> g)
     (fun g _ -> g)
-    (fun g (x, term) -> 
+    (* (fun g (x, term) -> 
       begin match term with
       | Ll.Ret (_, Some (Id id)) 
       | Ll.Ret (_, Some (Gid id)) -> 
         let neighbor_cs = neighbor_colors g (snd (UidM.find id g)) in
         begin match  LocSet.find_opt (Alloc.LReg Rax) neighbor_cs with 
-        | Some _ ->
-          (* print_string ("now looking at " ^ id ^ "\n its neighbor_cs: ");
-          UidSet.iter (fun c -> Printf.printf "%s, " (c)) (snd (UidM.find id g));
-          print_newline();
-          LocSet.iter (fun c -> Printf.printf "%s, " (Alloc.str_loc c)) neighbor_cs;
-          print_string ("\nhence, we don't choose Rax and leave the graph as-is.\n");
-          g  *)
-          g
+        | Some _ -> g
         | None -> InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty)
         end
-        (* begin match choose_singleton g (snd (UidM.find id g)) (Alloc.LReg Rax) with
-        | true -> InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty)
-        | false -> g
-        (* ?????????????????????????????????? I thought the logic is wrong! *)
-        end *)
-        (* InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty) *)
       | _ -> g
       end
-    )
+    ) *)
+    (fun g (x, term) -> g)
   g_edges f in
 
   InterferenceG.print_graph g_precolored;
@@ -1033,6 +1029,7 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   in
   
   let sub_graph, stack = fold_graph g_precolored [] in
+  (* let sub_graph, stack = fold_graph g_edges [] in *)
 
   print_string "sub_graph: \n";
   InterferenceG.print_graph sub_graph;
