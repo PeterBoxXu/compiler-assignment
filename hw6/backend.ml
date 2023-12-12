@@ -956,8 +956,8 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   let neighbor_colors (g: InterferenceG.t) (neighbors: UidSet.t) : LocSet.t = 
     let add_color (l : Alloc.loc option) (ls : LocSet.t) : LocSet.t = 
       begin match l with
-      | Some c -> LocSet.add c ls
-      | None -> ls 
+      | Some (Alloc.LReg r) -> LocSet.add (Alloc.LReg r) ls
+      | _ -> ls 
       end
     in
     UidSet.fold (fun v ls -> add_color (fst (UidM.find v g)) ls ) neighbors LocSet.empty
@@ -1008,22 +1008,23 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   g_edges f in
 
   (* iterate over fdecl to find the block with a ret terminator. Then check if this block has any insns. If so then see if uids of the insns match the one returned, if so then assign that uid as Rax in its color. Otherwise skip *)
-  let rec fold_blocks (g : InterferenceG.t) (blks: (lbl * block) list) : InterferenceG.t = 
+  let rec fold_blocks (g : InterferenceG.t) (blks: block list) : InterferenceG.t = 
     begin match blks with
     | [] -> g
-    | (_, {insns=is; term=(ut, Ret (_, Some (Id id) ))}) :: lst
-    | (_, {insns=is; term=(ut, Ret (_, Some (Gid id) ))}) :: lst -> 
+    | ({insns=is; term=(ut, Ret (_, Some (Id id) ))}) :: lst
+    | ({insns=is; term=(ut, Ret (_, Some (Gid id) ))}) :: lst -> 
       begin match List.rev is with
       | (x, _) :: _ ->
         if (x = id) then InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty)
         else fold_blocks g lst
       | _ -> fold_blocks g lst
       end
-    | _ :: lst -> fold_blocks g lst
+    | _ :: lst ->
+      fold_blocks g lst
     end
   in
-
-  let g_precolored = fold_blocks g_precolored (snd f.f_cfg) in
+  let blocks = fst f.f_cfg :: snd (List.split (snd f.f_cfg)) in
+  let g_precolored = fold_blocks g_precolored blocks in
 
   InterferenceG.print_graph g_precolored;
   print_string "g_precolored completed\n";
@@ -1041,9 +1042,6 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
 
     | None -> 
       let uid = InterferenceG.find_node_with_max_deg g in
-      let _, dummy_neighbors = UidM.find uid g in
-      
-      if (uid = "_array272") then (print_string ("uid = " ^ uid ^ "\n"); print_string ("deg = " ^ string_of_int (UidSet.cardinal dummy_neighbors) ^ "\n"); InterferenceG.print_graph g;) else ();
       let g', (loc, neighbors) = InterferenceG.remove_node g uid in
       let stack' = (uid, (Some (spill()), neighbors)) :: stack in (* why ? *)
       fold_graph g' stack'
