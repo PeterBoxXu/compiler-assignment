@@ -809,7 +809,13 @@ module InterferenceG = struct
     print_string ("-----------------------------\n"); ()
 
   let _find_node_with_deg_less_than (g:t) (k : int) : uid =
-    let uid, _ = UidM.find_last
+    UidM.fold (
+      fun x (loc, s) x0 : string ->
+        match loc with
+        | None -> if (UidSet.cardinal s < k) then x else x0
+        | Some _ -> x0
+    ) g ""
+    (* let uid, _ = UidM.find_first
     (fun uid -> 
       let (loc, s) = UidM.find uid g in 
       if uid = "_array272" then print_string ("_array272, deg: " ^ (string_of_int (UidSet.cardinal s)) ^ "\n");
@@ -817,10 +823,30 @@ module InterferenceG = struct
       | None -> (UidSet.cardinal s) < k
       | Some _ -> false
     ) g
-    in uid
+    in uid *)
 
   let find_node_with_deg_less_than (g:t) (k : int) : uid option =
-    try Some (_find_node_with_deg_less_than g k) with Not_found -> None
+    (* try Some (_find_node_with_deg_less_than g k) 
+    with Not_found -> 
+      print_string "HEREHEREHEREHEREHERE\n"; 
+      print_graph g; 
+      print_string "In the graph above, could not find node with degree less than ";
+      print_int k;
+      print_newline ();
+      print_string "HEREHEREHEREHEREHERE\n";
+      None *)
+
+    match (_find_node_with_deg_less_than g k) with 
+    | "" -> begin
+      (* print_string "HEREHEREHEREHEREHERE\n"; 
+      print_graph g; 
+      print_string "In the graph above, could not find node with degree less than ";
+      print_int k;
+      print_newline ();
+      print_string "HEREHEREHEREHEREHERE\n"; *)
+      None
+      end
+    | uid -> Some uid
   
   let find_node_with_max_deg (g:t) : uid = 
     let find_bigger (this_uid : string) (this: (Alloc.loc option * UidSet.t)) (biggest: string * (Alloc.loc option * UidSet.t)) : (string * (Alloc.loc option * UidSet.t)) = 
@@ -920,7 +946,7 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   print_string "g_edges completed\n";
 
   (* Step 3: color all "pre-colored" nodes *)
-  let used_colors (g: InterferenceG.t) (neighbors: UidSet.t) : LocSet.t = 
+  let neighbor_colors (g: InterferenceG.t) (neighbors: UidSet.t) : LocSet.t = 
     let add_color (l : Alloc.loc option) (ls : LocSet.t) : LocSet.t = 
       begin match l with
       | Some c -> LocSet.add c ls
@@ -931,12 +957,12 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   in
 
   let choose_color (g: InterferenceG.t) (neighbors: UidSet.t) : Alloc.loc =
-    let available_colors = LocSet.diff pal (used_colors g neighbors) in
+    let available_colors = LocSet.diff pal (neighbor_colors g neighbors) in
     LocSet.choose available_colors
   in
 
   let choose_singleton (g: InterferenceG.t) (neighbors: UidSet.t) (single_loc: Alloc.loc) : bool =
-    let available_colors = LocSet.diff (LocSet.singleton single_loc) (used_colors g neighbors) in
+    let available_colors = LocSet.diff (LocSet.singleton single_loc) (neighbor_colors g neighbors) in
     LocSet.is_empty available_colors
   in
 
@@ -958,11 +984,23 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
       begin match term with
       | Ll.Ret (_, Some (Id id)) 
       | Ll.Ret (_, Some (Gid id)) -> 
-        begin match choose_singleton g (snd (UidM.find id g)) (Alloc.LReg Rax) with
+        let neighbor_cs = neighbor_colors g (snd (UidM.find id g)) in
+        begin match  LocSet.find_opt (Alloc.LReg Rax) neighbor_cs with 
+        | Some _ ->
+          (* print_string ("now looking at " ^ id ^ "\n its neighbor_cs: ");
+          UidSet.iter (fun c -> Printf.printf "%s, " (c)) (snd (UidM.find id g));
+          print_newline();
+          LocSet.iter (fun c -> Printf.printf "%s, " (Alloc.str_loc c)) neighbor_cs;
+          print_string ("\nhence, we don't choose Rax and leave the graph as-is.\n");
+          g  *)
+          g
+        | None -> InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty)
+        end
+        (* begin match choose_singleton g (snd (UidM.find id g)) (Alloc.LReg Rax) with
         | true -> InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty)
         | false -> g
         (* ?????????????????????????????????? I thought the logic is wrong! *)
-        end
+        end *)
         (* InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty) *)
       | _ -> g
       end
