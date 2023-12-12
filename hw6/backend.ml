@@ -649,11 +649,7 @@ let greedy_layout (f:Ll.fdecl) (live:liveness) : layout =
     incr n_arg; res
   in
   (* The available palette of registers.  Excludes Rax and Rcx *)
-  let pal = LocSet.(caller_save
-                    |> add (Alloc.LReg Rbx)
-                    |> add (Alloc.LReg R12)   
-                    |> add (Alloc.LReg R13)
-                    |> add (Alloc.LReg R14)    
+  let pal = LocSet.(caller_save   
                     |> remove (Alloc.LReg Rax)
                     |> remove (Alloc.LReg Rcx)                       
                    )
@@ -873,6 +869,10 @@ end
 
 let better_layout (f:Ll.fdecl) (live:liveness) : layout =
   let pal = LocSet.(caller_save 
+                    (* |> add (Alloc.LReg Rbx)
+                    |> add (Alloc.LReg R12)    *)
+                    (* |> add (Alloc.LReg R13)
+                    |> add (Alloc.LReg R14)  *)
                     |> remove (Alloc.LReg Rax)
                     |> remove (Alloc.LReg Rcx)                       
                    ) in
@@ -1007,12 +1007,30 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     (fun g (x, term) -> g)
   g_edges f in
 
+  (* iterate over fdecl to find the block with a ret terminator. Then check if this block has any insns. If so then see if uids of the insns match the one returned, if so then assign that uid as Rax in its color. Otherwise skip *)
+  let rec fold_blocks (g : InterferenceG.t) (blks: (lbl * block) list) : InterferenceG.t = 
+    begin match blks with
+    | [] -> g
+    | (_, {insns=is; term=(ut, Ret (_, Some (Id id) ))}) :: lst
+    | (_, {insns=is; term=(ut, Ret (_, Some (Gid id) ))}) :: lst -> 
+      begin match List.rev is with
+      | (x, _) :: _ ->
+        if (x = id) then InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty)
+        else fold_blocks g lst
+      | _ -> fold_blocks g lst
+      end
+    | _ :: lst -> fold_blocks g lst
+    end
+  in
+
+  let g_precolored = fold_blocks g_precolored (snd f.f_cfg) in
+
   InterferenceG.print_graph g_precolored;
   print_string "g_precolored completed\n";
 
   (* Step 4: color all other nodes *)
   let rec fold_graph (g: InterferenceG.t) (stack: (string * (Alloc.loc option * UidSet.t)) list): InterferenceG.t * ((string * (Alloc.loc option * UidSet.t)) list) =
-    let k = 7 in
+    let k = LocSet.cardinal pal in
     if (InterferenceG.all_colored g) then g, stack
     else
     begin match (InterferenceG.find_node_with_deg_less_than g k) with
