@@ -1013,17 +1013,26 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     | [] -> g
     | ({insns=is; term=(ut, Ret (_, Some (Id id) ))}) :: lst
     | ({insns=is; term=(ut, Ret (_, Some (Gid id) ))}) :: lst -> 
+      print_string ("++++++++++++\nfold_blocks, terminator returns id: " ^ id ^ "\n++++++++++++\n");
       begin match List.rev is with
       | (x, _) :: _ ->
-        if (x = id) then InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty)
+        if (x = id) then 
+          let g' = InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty) in
+          fold_blocks g' lst
         else fold_blocks g lst
       | _ -> fold_blocks g lst
       end
-    | _ :: lst ->
+    | b :: lst ->
+      print_string ("++++++++++++\nfold_blocks, the block below returns nothing\n");
+      print_string (Llutil.string_of_block (b));
+      print_string ("++++++++++++\n");
       fold_blocks g lst
     end
   in
   let blocks = fst f.f_cfg :: snd (List.split (snd f.f_cfg)) in
+  print_string ("\n``````````````````````````\nbefore fold_blocks, these are the blocks being undergoing folding\n");
+  List.iter (fun b -> print_string (Llutil.string_of_block (b) ^ "\n"); print_newline()) blocks;
+  print_string ("``````````````````````````\n");
   let g_precolored = fold_blocks g_precolored blocks in
 
   InterferenceG.print_graph g_precolored;
