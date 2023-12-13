@@ -991,7 +991,34 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     )
       (* InterferenceG.add_node g x (Some(alloc_arg()), UidSet.empty)) *)
     (fun g _ -> g)
-    (fun g _ -> g)
+    (fun g (u, i) ->
+      begin match i with
+      | Ll.Call (_, _, os) ->
+        (* should we reset n_args to 0? *)
+        n_arg := 0;
+        print_string ("++++++++++++\nprecoloring insns, the uid u: " ^ u ^ "\n++++++++++++\n");
+        let g' = List.fold_left (fun g0 (_, o) ->
+          begin match o with 
+          | Id id ->
+            let expected_loc = alloc_arg() in
+            let neighbor_cs = neighbor_colors g (snd (UidM.find id g)) in
+            print_string ("precoloring insns, the id: " ^ id);
+            print_string ("precoloring insns, the expected_loc: " ^ (Alloc.str_loc expected_loc) ^ "\n");
+            (* check if this expected_loc is in neighbor colors of this instruction. *)
+            (* if so we don't color this node *)
+            if (LocSet.mem expected_loc neighbor_cs) then g0
+            else
+              (* if this node has been previously assigned a color, of course we don't recolor it. *)
+              (* However, we still need to increment the n_arg count to make sure the parameter indices are aligned. *) 
+              begin match (fst UidM.(find id g)) with
+              | None -> InterferenceG.add_node g0 id (Some expected_loc, UidSet.empty)
+              | Some _ -> g0
+              end
+          | _ -> g0
+          end
+          ) g os in g'
+      | _ -> g
+      end)
     (* (fun g (x, term) -> 
       begin match term with
       | Ll.Ret (_, Some (Id id)) 
