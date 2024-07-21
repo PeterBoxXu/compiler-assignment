@@ -8,3 +8,4 @@ output
 a.out
 **/run_tests_log
 **/*.zip
+analysis

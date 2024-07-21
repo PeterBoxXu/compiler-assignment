@@ -649,7 +649,7 @@ let greedy_layout (f:Ll.fdecl) (live:liveness) : layout =
     incr n_arg; res
   in
   (* The available palette of registers.  Excludes Rax and Rcx *)
-  let pal = LocSet.(caller_save 
+  let pal = LocSet.(caller_save   
                     |> remove (Alloc.LReg Rax)
                     |> remove (Alloc.LReg Rcx)                       
                    )
@@ -754,70 +754,109 @@ module InterferenceG = struct
   let add_node (g:t) (k : uid) (c, live_in : (Alloc.loc option * UidSet.t)) : t =
     let neighbors = UidSet.remove k live_in in
     (* for all neighbors of k, add k as their neighbor as well! *)
-    print_string ("add_node::k = " ^ k ^" neighbors: \n");
-    UidS.iter (fun x -> Printf.printf "%s\n" x)  neighbors;
     let g' = UidSet.fold (fun n g0 -> 
-        let (c, s) = try UidM.find n g0 with | Not_found -> 
-
-          failwith ("add_node: Not_found, k = " ^ k ^ ", n = "^ n) 
+        let (c, s) = 
+        try 
+          UidM.find n g0
+        with Not_found -> failwith ("add_node: Not_found k = " ^ k ^ " n = " ^ n)
         in
         UidM.add n (c, UidSet.add k s) g0
       ) neighbors g in
-    let old_neighbors = try snd (UidM.find k g') with | Not_found -> UidSet.empty in
-    let new_neighbors = UidSet.fold (fun n s -> UidSet.add n s) neighbors old_neighbors in
+    let old_neighbors = try snd (UidM.find k g') with Not_found -> UidSet.empty in
+    let new_neighbors = UidSet.union old_neighbors neighbors in
     UidM.add k (c, new_neighbors) g'
 
   let add_edge (g:t) (k1 : uid) (k2 : uid) : t =
-    print_string ("in func add_edge: " ^ k1 ^ " " ^ k2 ^ "\n");
+    if k1 = k2 then g
+    else
     let (c1, s1) = UidM.find k1 g in
     let (c2, s2) = UidM.find k2 g in
     let g' = UidM.add k1 (c1, UidSet.add k2 s1) g in
     UidM.add k2 (c2, UidSet.add k1 s2) g'
 
   let remove_node (g:t) (k : uid) : t * (Alloc.loc option * UidSet.t) =
-    print_string ("remove_node: " ^ k ^ "\n");
     let (c, neighbors) = UidM.find k g in
-
-    UidSet.fold (fun n _ -> print_string (n ^ "\n")) neighbors ();
-    
     let g' = UidSet.fold (fun n g0 -> 
-        let (c, s) = UidM.find n g0 in
+        let (c, s) = try UidM.find n g0 with Not_found -> failwith ("remove_node: Not_found k = " ^ k ^ " n = " ^ n) in
         UidM.add n (c, UidSet.remove k s) g0
       ) neighbors g in
-    UidM.add k (c, UidSet.empty) g', (c, neighbors)
+    UidM.remove k g', (c, neighbors)
 
-  let all_isolated (g: t) : bool = UidM.for_all (fun _ (_, s) -> UidSet.cardinal s <= 0) g
+  let print_graph (g:t) : unit = 
+    let print_node (uid : string) ((loc, neighbors) : (Alloc.loc option * UidSet.t)) : unit =
+      Printf.printf "uid: %s, loc: %s, neighbors: " uid (((
+        function | (Some x) -> Alloc.str_loc x 
+                  | None -> "None") loc));
+      UidSet.iter (fun uid -> Printf.printf "%s, " uid) neighbors;
+      Printf.printf "\n"
+    in
+
+    print_string ("-----------------------------\n");
+    UidM.iter print_node g;
+    print_string ("-----------------------------\n"); ()
+
+  let print_stack (stack : (string * (Alloc.loc option * UidSet.t)) list) : unit =
+    let print_node (uid : string) ((loc, neighbors) : (Alloc.loc option * UidSet.t)) : unit =
+      Printf.printf "uid: %s, loc: %s, neighbors: " uid (((
+        function | (Some x) -> Alloc.str_loc x 
+                  | None -> "None") loc));
+      UidSet.iter (fun uid -> Printf.printf "%s, " uid) neighbors;
+      Printf.printf "\n"
+    in
+
+    print_string ("-----------------------------\n");
+    List.iter (fun (uid, (loc, neighbors)) -> print_node uid (loc, neighbors)) stack;
+    print_string ("-----------------------------\n"); ()
 
   let _find_node_with_deg_less_than (g:t) (k : int) : uid =
-    let uid, _ =UidM.find_first (fun uid -> let (_, s) = UidM.find uid g in (UidSet.cardinal s > 0) && UidSet.cardinal s < k) g
-    in uid
+    UidM.fold (
+      fun x (loc, s) x0 : string ->
+        match loc with
+        | None -> if (UidSet.cardinal s < k) then x else x0
+        | Some _ -> x0
+    ) g ""
 
   let find_node_with_deg_less_than (g:t) (k : int) : uid option =
-    try Some (_find_node_with_deg_less_than g k) with Not_found -> None
+
+    match (_find_node_with_deg_less_than g k) with 
+    | "" ->
+      None
+    | uid -> Some uid
   
   let find_node_with_max_deg (g:t) : uid = 
     let find_bigger (this_uid : string) (this: (Alloc.loc option * UidSet.t)) (biggest: string * (Alloc.loc option * UidSet.t)) : (string * (Alloc.loc option * UidSet.t)) = 
       let deg_this = UidSet.cardinal (snd this) in
       let deg_biggest = UidSet.cardinal (snd (snd biggest)) in
-      if (deg_this < deg_biggest) then 
-        biggest
-      else (this_uid, this)
+      begin match fst this with
+      | None ->
+        if (deg_this < deg_biggest) then 
+          biggest
+        else (this_uid, this)
+      | Some _ -> biggest
+      end
     in
     let init = ("", (None, UidSet.empty)) in
     fst (UidM.fold find_bigger g init)
+
+  let all_colored (g:t) : bool =
+    UidM.for_all (fun _ (loc, _) -> loc <> None) g
 end    
 
 let better_layout (f:Ll.fdecl) (live:liveness) : layout =
+  let pal = LocSet.(caller_save 
+                    (* |> add (Alloc.LReg Rbx)
+                    |> add (Alloc.LReg R12)    *)
+                    (* |> add (Alloc.LReg R13)
+                    |> add (Alloc.LReg R14)  *)
+                    |> remove (Alloc.LReg Rax)
+                    |> remove (Alloc.LReg Rcx)                       
+                   ) in
 
-  (* let n_arg = ref 0 in
+  let n_arg = ref 0 in
   let n_spill = ref 0 in
 
   let spill () = (incr n_spill; Alloc.LStk (- !n_spill)) in
-  
-  (* Allocates a destination location for an incoming function parameter.
-     Corner case: argument 3, in Rcx occupies a register used for other
-     purposes by the compiler.  We therefore always spill it.
-  *)
+
   let alloc_arg () =
     let res =
       match arg_loc !n_arg with
@@ -826,65 +865,26 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     in
     incr n_arg; res
   in
-  (* The available palette of registers.  Excludes Rax and Rcx *)
-  let pal = LocSet.(caller_save 
-                    |> remove (Alloc.LReg Rax)
-                    |> remove (Alloc.LReg Rcx)                       
-                   )
-  in
-
-  (* Allocates a uid greedily based on liveness information *)
-  let allocate lo uid =
-    let loc =
-    try
-      let used_locs =
-        UidSet.fold (fun y -> LocSet.add (List.assoc y lo)) (live.live_in uid) LocSet.empty
-      in
-      let available_locs = LocSet.diff pal used_locs in
-      LocSet.choose available_locs
-    with
-    | Not_found -> spill ()
-    in
-    Platform.verb @@ Printf.sprintf "allocated: %s <- %s\n" (Alloc.str_loc loc) uid; loc
-  in
-
-  let lo =
-    fold_fdecl
-      (fun lo (x, _) -> (x, alloc_arg())::lo)
-      (fun lo l -> (l, Alloc.LLbl (Platform.mangle l))::lo)
-      (fun lo (x, i) ->
-        if insn_assigns i 
-        then (x, allocate lo x)::lo
-        else (x, Alloc.LVoid)::lo)
-      (fun lo _ -> lo)
-      [] f in
-  { uid_loc = (fun x -> List.assoc x lo)
-  ; spill_bytes = 8 * !n_spill
-  } *)
-
-  let pal = LocSet.(caller_save 
-                    |> remove (Alloc.LReg Rax)
-                    |> remove (Alloc.LReg Rcx)                       
-                   ) in
-
-  let n_spill = ref 0 in
-
-  let spill () = (incr n_spill; Alloc.LStk (- !n_spill)) in
 
   (* Step 1: add all nodes onto graph, without edges or color. *)
   let g_nodes = 
     fold_fdecl
       (fun g (x, _) -> InterferenceG.add_node g x (None, UidSet.empty))
       (fun g lbl -> InterferenceG.add_node g lbl (Some (Alloc.LLbl (Platform.mangle lbl)), UidSet.empty))
-      (fun g (x, i) -> print_string (Llutil.string_of_insn i); print_newline ();
-        if insn_assigns i then
-          let live_in = live.live_in x  in
+      (fun g (x, i) ->
+        if insn_assigns i 
+        then
+          let live_in = live.live_in x in
+
           let g' = UidSet.fold (fun y g0 ->
-              InterferenceG.add_node g0 y (None, live_in)
+              InterferenceG.add_node g0 y (None, UidSet.empty) (* covered the previous color !!!!*) (* complexity...haha, not equvalent to what haoran said*)
             ) live_in g in
-          InterferenceG.add_node g' x (None, live_in)
-        else g)
-      (fun g _ -> print_string "term\n"; g)
+          InterferenceG.add_node g' x (None, UidSet.empty)
+        else begin
+          InterferenceG.add_node g x (Some Alloc.LVoid, UidSet.empty)
+        end
+      )
+      (fun g (x, term) -> g)
       InterferenceG.empty f in
 
   (* Step 2: add all edge relationship between nodes, which can be access via traversing liveness facts. *)
@@ -892,104 +892,191 @@ let better_layout (f:Ll.fdecl) (live:liveness) : layout =
     fold_fdecl
       (fun g _ -> g)
       (fun g _ -> g)
-      (fun g (x, i) -> print_string (Llutil.string_of_insn i); print_newline ();
+      (fun g (x, i) ->
+        let live_in = live.live_in x in
+        let g_enum = UidSet.fold (fun y g0 ->
+          InterferenceG.add_node g0 y (None, live_in)
+        ) live_in g in
         if insn_assigns i then
-          let live_in = UidSet.remove x (live.live_in x)  in
-          let g' = UidSet.fold (fun y g0 -> 
-            print_string ("add_edge: " ^ x ^ " " ^ y ^ "\n");
-            if (x = y) 
-              then failwith ("same " ^ x ^ "\n")
-            else
+          let g' = UidSet.fold (fun y g0 ->
               InterferenceG.add_edge g0 x y
-            ) live_in g in g'
-        else g)
-      (fun g _ -> print_string "term_2\n"; g)
+            ) live_in g_enum in
+          InterferenceG.add_node g' x (None, live_in)
+        else g_enum)
+      (fun g (x, term) -> 
+        let live_in = UidSet.remove x (live.live_in x) in
+        let g' = UidSet.fold (fun y g0 ->
+            InterferenceG.add_node g0 y (None, live_in)
+          ) live_in g in
+        g'
+      )
       g_nodes f in
 
   (* Step 3: color all "pre-colored" nodes *)
-  (* TODO *)
+  let neighbor_colors (g: InterferenceG.t) (neighbors: UidSet.t) : LocSet.t = 
+    let add_color (l : Alloc.loc option) (ls : LocSet.t) : LocSet.t = 
+      begin match l with
+      | Some (Alloc.LReg r) -> LocSet.add (Alloc.LReg r) ls
+      | _ -> ls 
+      end
+    in
+    UidSet.fold (fun v ls -> add_color (fst (UidM.find v g)) ls ) neighbors LocSet.empty
+  in
 
-  (* Step 4: randomly color a variable node, to avoid the zero-degree problem. *)
+  let choose_color (g: InterferenceG.t) (neighbors: UidSet.t) : Alloc.loc =
+    let available_colors = LocSet.diff pal (neighbor_colors g neighbors) in
+    LocSet.choose available_colors
+  in
 
-  (* Step 5: color all other nodes *)
+  let choose_singleton (g: InterferenceG.t) (neighbors: UidSet.t) (single_loc: Alloc.loc) : bool =
+    let available_colors = LocSet.diff (LocSet.singleton single_loc) (neighbor_colors g neighbors) in
+    LocSet.is_empty available_colors
+  in
+
+  let g_precolored = 
+    fold_fdecl
+    (fun g (x, _) -> 
+      let (loc, neighbors) = UidM.find x g in
+      let expected_loc = alloc_arg()
+        (* begin match alloc_arg() with
+        | (Alloc.LReg r) -> Some (Alloc.LReg r)
+        | _ -> None
+        end *)
+      in
+      (* begin match choose_singleton g neighbors expected_loc with
+      | true -> InterferenceG.add_node g x (Some expected_loc, UidSet.empty)
+      | false -> InterferenceG.add_node g x (Some (spill()), UidSet.empty)
+      end *)
+      InterferenceG.add_node g x (Some expected_loc, UidSet.empty)
+    )
+      (* InterferenceG.add_node g x (Some(alloc_arg()), UidSet.empty)) *)
+    (fun g _ -> g)
+    (fun g (u, i) ->
+      begin match i with
+      | Ll.Call (_, _, os) ->
+        (* should we reset n_args to 0? *)
+        n_arg := 0;
+        let g' = List.fold_left (fun g0 (_, o) ->
+          begin match o with 
+          | Id id ->
+            let expected_loc = alloc_arg() in
+            let neighbor_cs = neighbor_colors g (snd (UidM.find id g)) in
+            (* check if this expected_loc is in neighbor colors of this instruction. *)
+            (* if so we don't color this node *)
+            if (LocSet.mem expected_loc neighbor_cs) then g0
+            else
+              (* if this node has been previously assigned a color, of course we don't recolor it. *)
+              (* However, we still need to increment the n_arg count to make sure the parameter indices are aligned. *) 
+              begin match (fst UidM.(find id g)) with
+              | None -> InterferenceG.add_node g0 id (Some expected_loc, UidSet.empty)
+              | Some _ -> g0
+              end
+          | _ -> g0
+          end
+          ) g os in g'
+      | _ -> g
+      end)
+    (* (fun g (x, term) -> 
+      begin match term with
+      | Ll.Ret (_, Some (Id id)) 
+      | Ll.Ret (_, Some (Gid id)) -> 
+        let neighbor_cs = neighbor_colors g (snd (UidM.find id g)) in
+        begin match  LocSet.find_opt (Alloc.LReg Rax) neighbor_cs with 
+        | Some _ -> g
+        | None -> InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty)
+        end
+      | _ -> g
+      end
+    ) *)
+    (fun g (x, term) -> g)
+  g_edges f in
+
+  (* iterate over fdecl to find the block with a ret terminator. Then check if this block has any insns. If so then see if uids of the insns match the one returned, if so then assign that uid as Rax in its color. Otherwise skip *)
+  let rec fold_blocks (g : InterferenceG.t) (blks: block list) : InterferenceG.t = 
+    begin match blks with
+    | [] -> g
+    | ({insns=is; term=(ut, Ret (_, Some (Id id) ))}) :: lst
+    | ({insns=is; term=(ut, Ret (_, Some (Gid id) ))}) :: lst -> 
+      begin match List.rev is with
+      | (x, _) :: _ ->
+        if (x = id) then 
+          let g' = InterferenceG.add_node g id (Some (Alloc.LReg Rax), UidSet.empty) in
+          fold_blocks g' lst
+        else fold_blocks g lst
+      | _ -> fold_blocks g lst
+      end
+    | b :: lst ->
+      fold_blocks g lst
+    end
+  in
+  let blocks = fst f.f_cfg :: snd (List.split (snd f.f_cfg)) in
+  let g_precolored = fold_blocks g_precolored blocks in
+
+  (* Step 4: color all other nodes *)
   let rec fold_graph (g: InterferenceG.t) (stack: (string * (Alloc.loc option * UidSet.t)) list): InterferenceG.t * ((string * (Alloc.loc option * UidSet.t)) list) =
-    let k = 7 in
-    (* if (UidM.is_empty g) then stack *)
-    if (InterferenceG.all_isolated g) then g, stack
+    let k = LocSet.cardinal pal in
+    if (InterferenceG.all_colored g) then g, stack
     else
     begin match (InterferenceG.find_node_with_deg_less_than g k) with
     | Some (uid) -> 
       let g', (loc, neighbors) = InterferenceG.remove_node g uid in
       let stack' = (uid, (loc, neighbors)) :: stack in
-      print_string "fold_graph_some\n";
       fold_graph g' stack'
 
     | None -> 
       let uid = InterferenceG.find_node_with_max_deg g in
       let g', (loc, neighbors) = InterferenceG.remove_node g uid in
-      let stack' = (uid, (Some (spill()), neighbors)) :: stack in
-      print_string "fold_graph_none\n";
+      let stack' = (uid, (Some (spill()), neighbors)) :: stack in (* why ? *)
       fold_graph g' stack'
     end
   in
-  let g_trimmed, stack = fold_graph g_edges [] in
-  print_string "fold_graph_end\n";
+  
+  let sub_graph, stack = fold_graph g_precolored [] in
+  (* let sub_graph, stack = fold_graph g_edges [] in *)
 
-  let choose_color (g: InterferenceG.t) (neighbors: UidSet.t) : Alloc.loc =
-    let used_colors (g: InterferenceG.t) (neighbors: UidSet.t) : LocSet.t = 
-      let add_color (l : Alloc.loc option) (ls : LocSet.t) : LocSet.t = 
-        begin match l with
-        | Some c -> LocSet.add c ls
-        | None -> ls 
-        end
-      in
-      UidSet.fold (fun v ls -> 
-        try 
-        add_color (fst (UidM.find v g)) ls
-        with | Not_found -> ls
-        ) neighbors LocSet.empty
-    in
-    print_string "found_used_color\n";
-    let used = used_colors g neighbors in
-    print_string "found_used_color_end\n";
-    let available_colors = LocSet.diff pal used in
-    print_string "found_available_color\n";
-    LocSet.choose available_colors
-  in
-  print_string "choose_color_end\n";
-
-  print_string "fold_stack_start\n";
-  List.fold_left (fun _ s -> print_string (s ^ " ")) () (List.map fst stack);
-  print_string "\n";
-  List.fold_left (fun _ s -> UidS.iter (fun x -> Printf.printf "%s " x) s) () (List.map (fun (_, (_, neighbors)) -> neighbors) stack);
-  print_string "\n";
+  (* Step 5: assign colors to all nodes in stack *)
 
   let fold_stack (g: InterferenceG.t) (uid, (loc, neighbors): (string * (Alloc.loc option * UidSet.t))) : InterferenceG.t = 
     begin match loc with
     | None -> 
-      print_string ("fold_at: " ^ uid ^ "\n");
       let color = choose_color g neighbors in
-      print_string ("fold_at_loc: " ^ uid ^ " " ^ (Alloc.str_loc color) ^ "\n");
-      let graph = InterferenceG.add_node g uid (Some color, neighbors) in
-      print_string ("fold_at_loc_end: " ^ uid ^ " " ^ (Alloc.str_loc color) ^ "\n"); graph
-    | Some (Alloc.LStk _) -> 
-      print_string ("fold_at_loc::Some_LStk\n");
-      let new_g = InterferenceG.add_node g uid (loc, neighbors) in
-      print_string ("fold_at_loc::Some_LStk_end\n");
-      new_g
-    | Some (Alloc.LLbl _) -> 
-      print_string ("fold_at_loc::Some_LLbl\n");
-      InterferenceG.add_node g uid (loc, neighbors)
-    | _ -> failwith "fold_stack: Folding on a precolored node"
+      InterferenceG.add_node g uid (Some color, neighbors)
+    | Some (Alloc.LStk _) -> InterferenceG.add_node g uid (loc, neighbors)
+    | Some (Alloc.LLbl _) -> InterferenceG.add_node g uid (loc, neighbors)
+    | Some (Alloc.LReg _) -> InterferenceG.add_node g uid (loc, neighbors)
+    | Some (Alloc.LVoid) -> InterferenceG.add_node g uid (loc, neighbors)
     end
   in 
-  (* let g_colored = List.fold_left fold_stack UidM.empty stack in *)
 
-  let g_colored = List.fold_left fold_stack g_trimmed stack in
-  print_string "fold_stack_end\n";
+  let g_colored = List.fold_left fold_stack sub_graph stack in
+
+
+  (* Step 6: revisit colored graph, see if we can reassign some spilled nodes with a valid register color*)
+
+  let optimistic_color (uid: string) (loc, neighbors: Alloc.loc option * UidSet.t) (g0: InterferenceG.t) : InterferenceG.t = 
+    begin match loc with
+    | Some (Alloc.LStk _) -> 
+      (try
+        let color = choose_color g0 neighbors in 
+        InterferenceG.add_node g0 uid (Some color, neighbors)
+      with | Not_found -> g0)
+    | _ -> g0
+    end 
+  in 
+
+  let g_optimistic = fold_fdecl
+    (fun g (x, _) -> g)
+    (fun g _ -> g)
+    (fun g (x, i) ->
+      if insn_assigns i 
+      then optimistic_color x (UidM.find x g) g
+      else g)
+    (fun g _ -> g)
+    g_colored f in
+
   
   { uid_loc= (fun x -> 
-    begin match fst (UidM.find x g_colored) with
+    begin match (try (fst (UidM.find x g_optimistic)) with Not_found -> failwith ("error at here, x = " ^ x))  with
     | None -> failwith "better_layout: uncolored node in colored graph"
     | Some loc -> loc
     end)
