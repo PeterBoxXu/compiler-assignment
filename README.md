@@ -1,6 +1,6 @@
 <h1>Compiler Design - Assignments</h1>
 
-This repository contains group assignments for the course <a href="https://www.vorlesungen.ethz.ch/Vorlesungsverzeichnis/lerneinheit.view?lerneinheitId=172030&semkez=2023W&ansicht=ALLE&lang=en">252-0210-00 Compiler Design</a> at ETH Zurich. The assignments consist of six tasks, five of which (Tasks 2-6) are graded and contribute 50% to the final course grade. Together, these five tasks develop a complete compiler that translates a fictional high-level language called Oat, which has C-like syntax, into X86-Lite machine code. Each task builds upon the previous one to complete a layer of the compiler. The coursework is implemented in OCaml.
+This repository contains group assignments for the course <a href="https://www.vorlesungen.ethz.ch/Vorlesungsverzeichnis/lerneinheit.view?lerneinheitId=172030&semkez=2023W&ansicht=ALLE&lang=en">252-0210-00 Compiler Design</a> at ETH Zurich. The assignments consist of six tasks, five of which (Tasks 2-6) are graded and contribute 50% to the final course grade. Together, these five tasks develop a complete compiler that translates a fictional high-level language called <a href="https://www.cs.princeton.edu/courses/archive/spring19/cos320/hw/oat2.pdf">Oat</a>, which has C-like syntax, into X86-Lite machine code. Each task builds upon the previous one to complete a layer of the compiler. The coursework is implemented in OCaml.
 
 ## Assignments
 ### HW2: Simulator for X86-Lite
